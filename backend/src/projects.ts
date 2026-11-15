@@ -38,10 +38,10 @@ export function loadProjects(db: DatabaseSync, opts: { all?: boolean; id?: strin
   const where = opts.id ? 'WHERE p.id = :id' : opts.all ? '' : 'WHERE p.active = 1';
   const params: Record<string, SQLInputValue> = opts.id ? { today, id: opts.id } : { today };
   const rows = db.prepare(`
-    SELECT p.*,
+    SELECT p.*, g.name AS group_name, g.color AS group_color,
       (SELECT json_group_array(e.key) FROM jira_epics e WHERE e.project_id = p.id) AS jira_keys,
       (SELECT COUNT(*) FROM mail_threads m WHERE m.project_id = p.id AND m.category = 'needs_reply' AND ${ACTIVE_MAIL}) AS needs_reply
-    FROM projects p ${where}
+    FROM projects p LEFT JOIN project_groups g ON g.id = p.group_id ${where}
     ORDER BY CASE p.role WHEN 'pm' THEN 0 ELSE 1 END, p.name`).all(params);
 
   const byProject = new Map<string, DeadlineRow[]>();

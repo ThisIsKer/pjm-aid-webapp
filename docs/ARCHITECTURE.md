@@ -42,7 +42,8 @@ what Claude found.
 |---|---|---|
 | Frontend | Angular 22, standalone components, signals, `httpResource`, lazy routes | Modern Angular defaults; no NgModules |
 | UI | Plain SCSS design tokens (no component library yet) | Keep the skeleton light; PrimeNG can be added when we need Gantt/timeline |
-| Language | Italian by default, English switch next to the logo (runtime `I18n` service + `t` pipe, choice kept in the browser) | Same build for both languages |
+| Language | Italian by default, English in **Settings** (gear icon next to the logo); runtime `I18n` service + `t` pipe, choice kept in the browser | Same build for both languages |
+| Theme | Light / dark / system in **Settings**; CSS custom properties in `styles.scss`, dark values under `:root[data-theme='dark']`, `Theme` service (`core/theme.ts`) | Easier on the eyes; no rebuild |
 | Backend | Node ≥ 24 running `.ts` directly (type stripping), Express 5 | No build step for the backend; same language as the frontend |
 | DB | SQLite through built-in `node:sqlite` | Zero native dependencies → no Visual Studio Build Tools on Windows |
 | Repo | npm workspaces (`backend`, `frontend`) + `concurrently` | One `npm install`, one `npm run dev` |
@@ -54,10 +55,17 @@ Every DDMD epic assigned to Sebastiano becomes a project automatically at the fi
 name = epic summary, client = text before the first " - "). Epics where he only owns phases (someone else's
 epic) become **contributor** projects. In the Projects page he can:
 
-- **group** epics into one project (e.g. "Mevis - FEI Slovacchia" + "Tecnica - FEI Slovacchia") — the emptied
+- **merge** epics into one project with "Merge epics into" (e.g. "Mevis - FEI Slovacchia" + "Tecnica - FEI Slovacchia") — the emptied
   project is hidden;
 - **hide** projects he doesn't want on the dashboard;
-- set **his own RAG status**, which is shown next to the Jira-derived one.
+- set **his own RAG status**, which is shown next to the Jira-derived one;
+- put projects into **custom groups** he creates (name + colour; table `project_groups`, `projects.group_id`).
+  Groups are a pure organisation layer, separate from merging epics ("Merge epics into"): the Projects page
+  shows one section per group (ungrouped last), and the dashboard's Projects panel shows group header rows and a
+  group filter. Deleting a group leaves its projects ungrouped.
+
+The dashboard fits the window: KPIs on top and four panels (today's activities, today's meetings, projects,
+deadlines), each with its own scrollbar — the page itself never scrolls.
 
 A project created from Jira is hidden automatically when none of its epics is reported open anymore.
 `data/seed.json` is now only needed for the documentation checklist template and for non-Jira projects.
@@ -139,12 +147,12 @@ grey → n/a.
 stages it to know projects, current phases, SharePoint folders, the checklist with `required` flags, open mail
 threads and the last sync time.
 
-## 6. Database schema (v5)
+## 6. Database schema (v6)
 
-`projects` · `jira_epics` · `deadlines` (+ view `v_deadlines` resolving each phase's project through its epic) ·
+`projects` · `project_groups` · `jira_epics` · `deadlines` (+ view `v_deadlines` resolving each phase's project through its epic) ·
 `mail_threads` · `calendar_events` · `doc_requirements` · `doc_template` · `sync_runs` · `sync_jobs` — see `backend/src/db.ts`.
 Migrations are append-only and tracked with `PRAGMA user_version` (v3 adds `projects.sharepoint_folder_uri`,
-`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`). Requirement id = `<projectId>--<slug(title)>`, which is the id
+`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`). Requirement id = `<projectId>--<slug(title)>`, which is the id
 Claude reports back in `docChecks`.
 
 ## 7. Snapshot contract v2 (`data/inbox/snapshot.json`)
@@ -185,7 +193,9 @@ Full example: `docs/examples/snapshot.example.json`.
 | GET/POST | `/projects` | list (`?all=true` includes hidden) / create |
 | GET/PATCH | `/projects/:id` | detail with epics, phases, mails, docs / update owned fields |
 | GET | `/jira/epics` | open epics and the project each belongs to |
-| PATCH | `/jira/epics/:key` | `{ projectId }` — group the epic into another project |
+| PATCH | `/jira/epics/:key` | `{ projectId }` — merge the epic into another project |
+| GET/POST | `/groups` | custom project groups with `projectCount` / create `{ name, color? }` (409 if the name exists) |
+| PATCH/DELETE | `/groups/:id` | rename, recolour, reorder `{ name?, color?, sort? }` / delete (projects become ungrouped) |
 | POST | `/projects/:id/deadlines` | add a manual deadline |
 | PATCH | `/deadlines/:id` | edit a manual deadline (Jira phases are edited in Jira) |
 | GET | `/mail?category=needs_reply&state=all` | triage list (snoozed items return when due) |
@@ -223,7 +233,7 @@ Full example: `docs/examples/snapshot.example.json`.
 3. **MCP server** (`backend/src/mcp.ts`, stdio, talks to the running backend's REST API so the backend stays the
    only writer). Tools: `pjm_dashboard`, `pjm_list_projects`, `pjm_get_project` (id, epic key or name),
    `pjm_today`, `pjm_list_mail`, `pjm_update_mail` (done / snooze / reopen / assign), `pjm_doc_gaps`, `pjm_update_project`
-   (status, PM note, phase override, SharePoint link, hide/show), `pjm_add_deadline`, `pjm_waive_doc`,
+   (status, PM note, phase override, SharePoint link, hide/show, custom group — created if missing), `pjm_add_deadline`, `pjm_waive_doc`,
    `pjm_sync_status`. Register it in Claude Code with
    `claude mcp add pjm-aid --scope user -- node <repo>\backend\src\mcp.ts`, and in the Claude desktop app
    (so Cowork sessions linked to the laptop see it) under `mcpServers` in `claude_desktop_config.json`.
@@ -240,4 +250,5 @@ Full example: `docs/examples/snapshot.example.json`.
 | 3 | Mail triage via Outlook; phase-aware doc checks via SharePoint + Confluence; registry.json | ✅ |
 | 4 | "Sync now" via Claude Code; MCP server; project detail page with editing (status, phase, note, SharePoint, manual deadlines, mail, docs) | ✅ |
 | 4b | Today's activities and meetings (calendar sync), Italian/English UI, status labels Critical/Warning/Ok, add-document dialog | ✅ |
+| 4c | Dark theme + Settings page, no-scroll dashboard with per-panel scrollbars, custom project groups | ✅ |
 | 5 | Weekday-morning scheduled sync (daily Jira + mail + calendar, Monday + docs) | at the end |

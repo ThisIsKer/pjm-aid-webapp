@@ -25,9 +25,10 @@ const PROJECT_FIELDS: Record<string, FieldDef> = {
   mailKeywords: { col: 'mail_keywords', json: true },
   mailDomains: { col: 'mail_domains', json: true },
   active: { col: 'active', bool: true },
+  groupId: { col: 'group_id' },
 };
 
-function patch(db: DatabaseSync, table: string, id: string, body: Record<string, unknown>, fields: Record<string, FieldDef>): number {
+function patch(db: DatabaseSync, table: string, id: string, body: Record<string, unknown>, fields: Record<string, FieldDef>, touch = true): number {
   const sets: string[] = [];
   const values: SQLInputValue[] = [];
   for (const [key, def] of Object.entries(fields)) {
@@ -37,7 +38,7 @@ function patch(db: DatabaseSync, table: string, id: string, body: Record<string,
     values.push(def.json ? JSON.stringify(v ?? []) : def.bool ? (v ? 1 : 0) : ((v ?? null) as SQLInputValue));
   }
   if (!sets.length) return 0;
-  sets.push(`updated_at = datetime('now')`);
+  if (touch) sets.push(`updated_at = datetime('now')`);
   return Number(db.prepare(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = ?`).run(...values, id).changes);
 }
 
@@ -115,6 +116,34 @@ export function apiRouter(db: DatabaseSync): Router {
     const id = param(req, 'id');
     if (!patch(db, 'projects', id, req.body as Record<string, unknown>, PROJECT_FIELDS)) return notFound(res);
     res.json(getProjectRow(db, id));
+  });
+
+  // ---------- Custom project groups ----------
+  const groups = () => toApiList(db.prepare(`SELECT g.*, (SELECT COUNT(*) FROM projects p WHERE p.group_id = g.id) AS project_count
+    FROM project_groups g ORDER BY g.sort, g.name`).all());
+  r.get('/groups', (_req, res) => res.json(groups()));
+
+  r.post('/groups', (req, res) => {
+    const b = req.body as { name?: string; color?: string };
+    if (!b.name?.trim()) return res.status(400).json({ error: 'name is required' });
+    const id = Number(db.prepare('INSERT INTO project_groups (name, color, sort) VALUES (?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM project_groups))')
+      .run(b.name.trim(), b.color ?? null).lastInsertRowid);
+    res.status(201).json(toApi(db.prepare('SELECT * FROM project_groups WHERE id = ?').get(id)));
+  });
+
+  r.patch('/groups/:id', (req, res) => {
+    const changes = patch(db, 'project_groups', param(req, 'id'), req.body as Record<string, unknown>, {
+      name: { col: 'name' }, color: { col: 'color' }, sort: { col: 'sort' },
+    }, false);
+    if (!changes) return notFound(res);
+    res.json(toApi(db.prepare('SELECT * FROM project_groups WHERE id = ?').get(param(req, 'id'))));
+  });
+
+  r.delete('/groups/:id', (req, res) => {
+    // Projects in the group are kept and become ungrouped (ON DELETE SET NULL).
+    const changes = Number(db.prepare('DELETE FROM project_groups WHERE id = ?').run(param(req, 'id')).changes);
+    if (!changes) return notFound(res);
+    res.status(204).end();
   });
 
   // ---------- Jira epics (link an epic to another project to group several epics) ----------

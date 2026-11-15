@@ -186,6 +186,16 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX ix_calendar_start ON calendar_events(start_at);
   `,
+  /* v6 — custom project groups (user-defined, e.g. "FEI Germania") */ `
+  CREATE TABLE project_groups (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    color      TEXT,
+    sort       INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  ALTER TABLE projects ADD COLUMN group_id INTEGER REFERENCES project_groups(id) ON DELETE SET NULL;
+  `,
 ];
 
 export function openDb(file: string): DatabaseSync {

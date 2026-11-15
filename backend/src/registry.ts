@@ -14,7 +14,7 @@ export function exportRegistry(db: DatabaseSync): void {
   try {
     const last = db.prepare('SELECT generated_at, imported_at FROM sync_runs ORDER BY id DESC LIMIT 1').get();
     const projects = loadProjects(db, { all: true }).map((p) => ({
-      id: p['id'], name: p['name'], client: p['client'], role: p['role'], active: p['active'],
+      id: p['id'], name: p['name'], client: p['client'], group: p['groupName'] ?? null, role: p['role'], active: p['active'],
       jiraKeys: p['jiraKeys'], currentPhase: p.currentPhase, phaseOverride: p['phase'],
       sharepointUrl: p['sharepointUrl'], sharepointFolderUri: p['sharepointFolderUri'],
       confluenceSpace: p['confluenceSpace'], mailKeywords: p['mailKeywords'], mailDomains: p['mailDomains'],

@@ -23,7 +23,7 @@ npm start            # http://localhost:4310
 
 ## Your data
 
-- Projects are created from your **Jira epics** by Claude's `pjm-sync` skill — ask Claude "sync PJM" (Jira + mail) or "sync PJM docs" (+ SharePoint/Confluence checks). Group or hide projects on the Projects page.
+- Projects are created from your **Jira epics** by Claude's `pjm-sync` skill — ask Claude "sync PJM" (Jira + mail) or "sync PJM docs" (+ SharePoint/Confluence checks). On the Projects page you can merge epics, put projects into your own groups, or hide them. Language and light/dark theme are in Settings (gear icon).
 - `data/seed.json` — documentation checklist template (re-read at every start) and any non-Jira projects (git-ignored).
 - `data/registry.json` — written by the app for Claude (projects, checklist, open mails, last sync).
 - `data/inbox/snapshot.json` — written by `pjm-sync`; the backend imports it automatically within a few seconds.

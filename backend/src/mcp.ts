@@ -53,7 +53,7 @@ async function resolveProject(query: string) {
 }
 
 const projectLine = (p: any) => ({
-  id: p.id, name: p.name, role: p.role, active: p.active, myStatus: p.status, jiraRag: p.jiraRag, jiraReason: p.jiraRagReason,
+  id: p.id, name: p.name, group: p.groupName ?? null, role: p.role, active: p.active, myStatus: p.status, jiraRag: p.jiraRag, jiraReason: p.jiraRagReason,
   phase: p.phase ?? p.currentPhase?.name ?? null, nextDeadline: p.nextDeadline, overdue: p.overdue, atRisk: p.atRisk,
   mailsToAnswer: p.needsReply, missingDocs: p.missingDocs, uncheckedDocs: p.uncheckedDocs, epics: p.jiraKeys,
 });
@@ -174,7 +174,7 @@ server.registerTool('pjm_doc_gaps', {
 
 server.registerTool('pjm_update_project', {
   title: 'Update a project',
-  description: 'Set my RAG status, a PM note, a phase override or the SharePoint link of a project, or hide/show it.',
+  description: 'Set my RAG status, a PM note, a phase override, the SharePoint link or the custom group of a project, or hide/show it.',
   inputSchema: {
     project: z.string(),
     status: z.enum(['green', 'amber', 'red', 'grey']).optional(),
@@ -182,10 +182,17 @@ server.registerTool('pjm_update_project', {
     phase: z.string().nullable().optional().describe('Overrides the phase derived from Jira; null to clear'),
     sharepointUrl: z.string().url().optional(),
     active: z.boolean().optional(),
+    group: z.string().nullable().optional().describe('Custom group name (created if missing); null removes the project from its group'),
   },
-}, tool(async ({ project, ...changes }: { project: string; [k: string]: unknown }) => {
+}, tool(async ({ project, group, ...changes }: { project: string; group?: string | null; [k: string]: unknown }) => {
   const p = await resolveProject(project);
-  const body = Object.fromEntries(Object.entries(changes).filter(([, v]) => v !== undefined));
+  const body: Record<string, unknown> = Object.fromEntries(Object.entries(changes).filter(([, v]) => v !== undefined));
+  if (group === null) body['groupId'] = null;
+  else if (group) {
+    const groups = await api<any[]>('/groups');
+    const existing = groups.find((g) => g.name.toLowerCase() === group.trim().toLowerCase());
+    body['groupId'] = existing ? existing.id : (await api('/groups', { method: 'POST', body: { name: group.trim() } })).id;
+  }
   if (!Object.keys(body).length) throw new Error('Nothing to change');
   return api(`/projects/${encodeURIComponent(p.id)}`, { method: 'PATCH', body });
 }));

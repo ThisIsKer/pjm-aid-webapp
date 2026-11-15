@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import type { Deadline, DocRequirement, MailThread, Project, SyncJob } from './models';
+import type { Deadline, DocRequirement, MailThread, Project, ProjectGroup, SyncJob } from './models';
 
 /** Write operations. Reads use httpResource() directly in the pages. */
 @Injectable({ providedIn: 'root' })
@@ -23,6 +23,18 @@ export class Api {
 
   updateDoc(id: string, body: Partial<Pick<DocRequirement, 'waived' | 'locationHint' | 'phase'>>) {
     return firstValueFrom(this.http.patch<DocRequirement>(`/api/docs/${id}`, body));
+  }
+
+  createGroup(name: string, color: string | null) {
+    return firstValueFrom(this.http.post<ProjectGroup>('/api/groups', { name, color }));
+  }
+
+  updateGroup(id: number, body: Partial<Pick<ProjectGroup, 'name' | 'color' | 'sort'>>) {
+    return firstValueFrom(this.http.patch<ProjectGroup>(`/api/groups/${id}`, body));
+  }
+
+  deleteGroup(id: number) {
+    return firstValueFrom(this.http.delete<{ ok: boolean }>(`/api/groups/${id}`));
   }
 
   linkEpic(key: string, projectId: string) {

@@ -31,6 +31,17 @@ export interface Project {
   missingDocs: number;
   uncheckedDocs: number;
   sharepointFolderUri: string | null;
+  groupId: number | null;
+  groupName: string | null;
+  groupColor: string | null;
+}
+
+export interface ProjectGroup {
+  id: number;
+  name: string;
+  color: string | null;
+  sort: number;
+  projectCount?: number;
 }
 
 export type Flag = 'overdue' | 'at_risk' | 'missing_due' | 'missing_start' | 'missing_estimate';
