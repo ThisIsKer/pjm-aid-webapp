@@ -1,20 +1,18 @@
 import { Component, input } from '@angular/core';
+import { TPipe } from '../core/i18n';
 import type { Flag } from '../core/models';
 
-const LABELS: Record<Flag, { text: string; cls: string }> = {
-  overdue: { text: 'overdue', cls: 'red' },
-  at_risk: { text: 'at risk', cls: 'amber' },
-  missing_due: { text: 'no due date', cls: '' },
-  missing_start: { text: 'no start date', cls: '' },
-  missing_estimate: { text: 'no estimate', cls: '' },
+const CLASSES: Record<Flag, string> = {
+  overdue: 'red', at_risk: 'amber', missing_due: '', missing_start: '', missing_estimate: '',
 };
 
 @Component({
   selector: 'app-flag-badges',
-  template: `@for (f of flags(); track f) { <span class="badge {{ labels[f].cls }}">{{ labels[f].text }}</span> }`,
+  imports: [TPipe],
+  template: `@for (f of flags(); track f) { <span class="badge {{ classes[f] }}">{{ 'flag.' + f | t }}</span> }`,
   styles: `:host { display: inline-flex; gap: 4px; flex-wrap: wrap; }`,
 })
 export class FlagBadges {
   readonly flags = input.required<Flag[]>();
-  protected readonly labels = LABELS;
+  protected readonly classes = CLASSES;
 }

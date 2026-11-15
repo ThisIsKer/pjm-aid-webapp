@@ -1,27 +1,26 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { RouterLink } from '@angular/router';
 import { httpResource } from '@angular/common/http';
+import { RouterLink } from '@angular/router';
 import { Api } from '../../core/api';
+import { I18n, TPipe, jiraReason } from '../../core/i18n';
 import type { Project, Rag } from '../../core/models';
 import { RagDot } from '../../shared/rag-dot';
 
 @Component({
   selector: 'app-projects',
-  imports: [DatePipe, RagDot, RouterLink],
+  imports: [DatePipe, RagDot, RouterLink, TPipe],
   template: `
     <header class="page-head">
-      <h1>Projects</h1>
-      <label class="small muted"><input type="checkbox" [checked]="showHidden()" (change)="showHidden.set(!showHidden())" /> show hidden</label>
+      <h1>{{ 'proj.title' | t }}</h1>
+      <label class="small muted"><input type="checkbox" [checked]="showHidden()" (change)="showHidden.set(!showHidden())" /> {{ 'proj.showHidden' | t }}</label>
     </header>
-    <p class="muted small">
-      One project is created per Jira epic. To group several epics (e.g. a client epic and its "Tecnica" epic) pick the target in
-      <em>Group into</em>. Hide projects you don't want on the dashboard.
-    </p>
+    <p class="muted small">{{ 'proj.help' | t }}</p>
     <div class="card">
       <table>
         <thead>
-          <tr><th></th><th>Project</th><th>My status</th><th>Phase</th><th>Jira</th><th>Next due</th><th>Group into</th><th></th></tr>
+          <tr><th></th><th>{{ 'col.project' | t }}</th><th>{{ 'col.myStatus' | t }}</th><th>{{ 'col.phase' | t }}</th><th>{{ 'col.jira' | t }}</th>
+            <th>{{ 'col.nextDue' | t }}</th><th>{{ 'col.groupInto' | t }}</th><th></th></tr>
         </thead>
         <tbody>
           @for (p of projects(); track p.id) {
@@ -29,17 +28,17 @@ import { RagDot } from '../../shared/rag-dot';
               <td><app-rag-dot [status]="p.status" /></td>
               <td>
                 <a class="plain" [routerLink]="['/projects', p.id]"><strong>{{ p.name }}</strong></a>
-                @if (p.role === 'contributor') { <span class="badge">contributor</span> }
+                @if (p.role === 'contributor') { <span class="badge">{{ 'common.contributor' | t }}</span> }
                 <div class="small">@for (k of p.jiraKeys; track k) { <a [href]="jiraUrl(k)" target="_blank">{{ k }}</a>&nbsp; }</div>
               </td>
               <td>
-                <select [value]="p.status" (change)="setStatus(p, $any($event.target).value)">
-                  @for (s of statuses; track s) { <option [value]="s" [selected]="s === p.status">{{ s }}</option> }
+                <select (change)="setStatus(p, $any($event.target).value)">
+                  @for (s of statuses; track s) { <option [value]="s" [selected]="s === p.status">{{ 'rag.' + s | t }}</option> }
                 </select>
               </td>
               <td>{{ p.phase ?? p.currentPhase?.name ?? '—' }}</td>
-              <td><span class="badge {{ p.jiraRag }}" [title]="p.jiraRagReason">{{ p.jiraRag === 'grey' ? 'n/a' : p.jiraRag }}</span></td>
-              <td>{{ p.nextDeadline ? (p.nextDeadline | date: 'dd/MM/yy') : '—' }}</td>
+              <td><span class="badge {{ p.jiraRag }}" [title]="reason(p)">{{ 'rag.' + p.jiraRag | t }}</span></td>
+              <td>{{ p.nextDeadline ? (p.nextDeadline | date: 'dd/MM/yy' : undefined : i18n.locale()) : '—' }}</td>
               <td>
                 @if (p.jiraKeys.length) {
                   <select (change)="groupInto(p, $any($event.target).value)">
@@ -48,10 +47,10 @@ import { RagDot } from '../../shared/rag-dot';
                   </select>
                 }
               </td>
-              <td><button (click)="toggleActive(p)">{{ p.active ? 'Hide' : 'Show' }}</button></td>
+              <td><button (click)="toggleActive(p)">{{ (p.active ? 'common.hide' : 'common.show') | t }}</button></td>
             </tr>
           } @empty {
-            <tr><td colspan="8" class="empty">No projects yet — run the Claude sync.</td></tr>
+            <tr><td colspan="8" class="empty">{{ 'proj.empty' | t }}</td></tr>
           }
         </tbody>
       </table>
@@ -60,6 +59,7 @@ import { RagDot } from '../../shared/rag-dot';
 })
 export class ProjectsPage {
   private readonly api = inject(Api);
+  protected readonly i18n = inject(I18n);
   protected readonly statuses: Rag[] = ['green', 'amber', 'red', 'grey'];
   protected readonly showHidden = signal(false);
   protected readonly all = httpResource<Project[]>(() => '/api/projects?all=true');
@@ -67,6 +67,7 @@ export class ProjectsPage {
   protected readonly targets = computed(() => (this.all.value() ?? []).filter((p) => p.active));
 
   protected jiraUrl = (key: string) => `https://archivagroup.atlassian.net/browse/${key}`;
+  protected reason = (p: Project) => jiraReason(this.i18n, p);
 
   protected async setStatus(p: Project, status: Rag) {
     await this.api.updateProject(p.id, { status });

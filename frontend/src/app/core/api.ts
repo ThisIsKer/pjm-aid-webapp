@@ -16,6 +16,11 @@ export class Api {
     return firstValueFrom(this.http.patch<MailThread>(`/api/mail/${id}`, body));
   }
 
+  addDoc(projectId: string, body: { title: string; repository: 'sharepoint' | 'confluence'; phase?: string; requiredFrom?: string;
+    locationHint?: string; foundUrl?: string }) {
+    return firstValueFrom(this.http.post<DocRequirement>(`/api/projects/${encodeURIComponent(projectId)}/docs`, body));
+  }
+
   updateDoc(id: string, body: Partial<Pick<DocRequirement, 'waived' | 'locationHint' | 'phase'>>) {
     return firstValueFrom(this.http.patch<DocRequirement>(`/api/docs/${id}`, body));
   }
@@ -32,8 +37,8 @@ export class Api {
     return firstValueFrom(this.http.patch<Deadline>(`/api/deadlines/${id}`, body));
   }
 
-  startSync(mode: SyncJob['mode']) {
-    return firstValueFrom(this.http.post<SyncJob>('/api/sync/run', { mode }));
+  startSync(mode: SyncJob['mode'], lang: 'it' | 'en') {
+    return firstValueFrom(this.http.post<SyncJob>('/api/sync/run', { mode, lang }));
   }
 
   currentSyncJob() {

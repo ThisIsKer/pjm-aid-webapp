@@ -5,6 +5,7 @@
  *   node tools/build-snapshot.ts --me <accountId> --site https://archivagroup.atlassian.net \
  *     --epics a.json [--phases b.json ...] [--foreign c.json ...] [--subtasks d.json ...] --out snapshot.json
  *     [--mail mail.json] [--docs docs.json] [--folders folders.json]
+ *     [--calendar <files…> --calendar-from <ISO> --calendar-to <ISO>]
  *   node tools/build-snapshot.ts --candidates --phases b.json --foreign c.json
  *       → prints the keys of open phases that are overdue or due within 14 days (to fetch their open sub-tasks)
  *
@@ -16,6 +17,9 @@
  *   mail.json    [{subject, projectId?, counterpart, lastMessageAt, lastFromMe, category, urgency, summary, webLink}]
  *   docs.json    [{requirementId, status: missing|present|outdated|unknown, foundUrl?, checkedAt?}]
  *   folders.json [{projectId, folderUri, webUrl}]
+ * --calendar takes raw Microsoft 365 `outlook_calendar_search` results (saved tool output, possibly several JSON
+ * objects back to back) or compact rows [{id, subject, start, end, isAllDay, location, organizer, organizerName,
+ * showAs, isCancelled, isOrganizer, webLink, onlineUrl}] — start/end as ISO strings (UTC with Z, or local time).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -125,6 +129,48 @@ const phases: SnapshotPhase[] = phaseRows.filter((r) => r.parent).map((r) => ({
   url: url(r.key), openSubtasks: subtasksByParent.get(r.key) ?? [],
 }));
 
+// ---------- Calendar ----------
+/** Parses a file holding one JSON value, or several JSON objects back to back (raw MCP tool output). */
+function parseMany(raw: string): unknown[] {
+  const text = raw.trim();
+  try {
+    const v = JSON.parse(text);
+    return Array.isArray(v) ? v : [v];
+  } catch { /* fall through: concatenated objects */ }
+  const out: unknown[] = [];
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '{') { if (depth++ === 0) start = i; }
+    else if (c === '}') { if (--depth === 0) out.push(JSON.parse(text.slice(start, i + 1))); }
+  }
+  return out;
+}
+
+/** Graph {dateTime, timeZone} → ISO; UTC gets a Z, other zones are kept as local wall-clock time. */
+const graphTime = (t: any): string => {
+  if (typeof t === 'string') return t;
+  const dt = String(t?.dateTime ?? '').replace(/\.\d+$/, '');
+  return /^utc$/i.test(String(t?.timeZone ?? '')) ? `${dt}Z` : dt;
+};
+const teamsUrl = (text: unknown) => String(text ?? '').match(/https:\/\/teams\.microsoft\.com\/[^\s>"')]+/)?.[0] ?? null;
+
+const calendarEvents = (a['calendar'] ?? [])
+  .flatMap((f) => parseMany(fs.readFileSync(f, 'utf8')))
+  .flatMap((x: any) => (Array.isArray(x?.events) ? x.events : [x]))
+  .filter((e: any) => e && e.subject !== undefined && e.start)
+  .map((e: any) => ({
+    id: String(e.id ?? `${e.subject}|${graphTime(e.start)}`), subject: String(e.subject ?? ''),
+    start: graphTime(e.start), end: graphTime(e.end), isAllDay: !!e.isAllDay, location: e.location ?? null,
+    onlineUrl: e.onlineUrl ?? teamsUrl(e.summary) ?? teamsUrl(e.location), organizer: e.organizer ?? null,
+    organizerName: e.organizerName ?? null, attendees: e.attendees ?? [], showAs: e.showAs ?? null,
+    isCancelled: !!e.isCancelled, isOrganizer: !!e.isOrganizer, webLink: e.webLink ?? null,
+  }));
+const uniqueEvents = [...new Map(calendarEvents.map((e) => [e.id, e])).values()];
+if (a['calendar'] && (!a['calendar-from']?.[0] || !a['calendar-to']?.[0])) throw new Error('--calendar needs --calendar-from and --calendar-to');
+
 // ---------- Claude-written sections ----------
 const readJson = (flag: string): any[] => (a[flag] ?? []).flatMap((f) => JSON.parse(fs.readFileSync(f, 'utf8')));
 const oneOf = (v: unknown, allowed: string[], what: string) => {
@@ -160,6 +206,7 @@ const snapshot: SnapshotV2 = {
   ...(a['mail'] ? { mailThreads: [...mailById.values()] } : {}),
   ...(a['docs'] ? { docChecks } : {}),
   ...(a['folders'] ? { projectFolders } : {}),
+  ...(a['calendar'] ? { calendar: { from: a['calendar-from']![0]!, to: a['calendar-to']![0]!, events: uniqueEvents } } : {}),
 };
 fs.mkdirSync(path.dirname(a['out'][0]), { recursive: true });
 // Write atomically: the app watches the inbox and must never read a half-written file.
@@ -186,6 +233,7 @@ if (a['mail']) {
   console.log(`MAIL: ${byCat('needs_reply').length} need a reply, ${byCat('waiting').length} waiting on others, ${byCat('fyi').length} fyi`);
   for (const m of byCat('needs_reply')) console.log(`  - ${m.urgency === 'high' ? '[urgent] ' : ''}${m.subject} — ${m.counterpart ?? ''}`);
 }
+if (a['calendar']) console.log(`CALENDAR: ${uniqueEvents.length} event(s) between ${a['calendar-from']![0]} and ${a['calendar-to']![0]}`);
 if (a['docs']) {
   const by = (st: string) => docChecks.filter((d) => d.status === st).length;
   console.log(`DOCS checked: ${docChecks.length} (present ${by('present')}, missing ${by('missing')}, outdated ${by('outdated')}, unknown ${by('unknown')})`);

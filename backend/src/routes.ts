@@ -5,6 +5,7 @@ import { config } from './config.ts';
 import { addDays, isoToday } from './flags.ts';
 import { ACTIVE_MAIL, getProjectRow, loadDeadlines, loadProjects } from './projects.ts';
 import { applyDocTemplate } from './seed.ts';
+import { dayPlan } from './today.ts';
 import { importSnapshotIfPresent } from './snapshot.ts';
 import { slug, toApi, toApiList } from './util.ts';
 
@@ -76,6 +77,12 @@ export function apiRouter(db: DatabaseSync): Router {
       deadlines,
       lastSync: lastSync(db),
     });
+  });
+
+  // ---------- Day plan: today's activities and meetings ----------
+  r.get('/today', (req, res) => {
+    const date = typeof req.query['date'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query['date']) ? req.query['date'] : undefined;
+    res.json(dayPlan(db, date));
   });
 
   // ---------- Projects ----------
@@ -187,17 +194,24 @@ export function apiRouter(db: DatabaseSync): Router {
 
   r.post('/projects/:id/docs', (req, res) => {
     const projectId = param(req, 'id');
-    const b = req.body as { title?: string; repository?: string; phase?: string; locationHint?: string };
-    if (!b.title || !b.repository) return res.status(400).json({ error: 'title and repository are required' });
+    const b = req.body as { title?: string; repository?: string; phase?: string; requiredFrom?: string; locationHint?: string; foundUrl?: string };
+    if (!b.title?.trim() || !['sharepoint', 'confluence'].includes(b.repository ?? '')) {
+      return res.status(400).json({ error: 'title and repository (sharepoint | confluence) are required' });
+    }
+    if (!getProjectRow(db, projectId)) return notFound(res);
     const id = `${projectId}--${slug(b.title)}`;
-    db.prepare('INSERT INTO doc_requirements (id, project_id, phase, title, repository, location_hint) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, projectId, b.phase ?? null, b.title, b.repository, b.locationHint ?? null); // manual: from_template = 0
+    const found = b.foundUrl?.trim() || null;
+    // Manual requirement (from_template = 0): kept even if the template changes. A link means "already present".
+    db.prepare(`INSERT INTO doc_requirements (id, project_id, phase, required_from, title, repository, location_hint,
+        check_status, found_url, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, projectId, b.phase || null, b.requiredFrom || null, b.title.trim(), b.repository!, b.locationHint?.trim() || null,
+        found ? 'present' : 'unknown', found, found ? new Date().toISOString() : null);
     res.status(201).json(toApi(db.prepare('SELECT * FROM doc_requirements WHERE id = ?').get(id)));
   });
 
   r.patch('/docs/:id', (req, res) => {
     const changes = patch(db, 'doc_requirements', param(req, 'id'), req.body as Record<string, unknown>, {
-      waived: { col: 'waived', bool: true }, locationHint: { col: 'location_hint' },
+      waived: { col: 'waived', bool: true }, locationHint: { col: 'location_hint' }, foundUrl: { col: 'found_url' },
     });
     if (!changes) return notFound(res);
     res.json(toApi(db.prepare('SELECT * FROM doc_requirements WHERE id = ?').get(param(req, 'id'))));
@@ -212,10 +226,12 @@ export function apiRouter(db: DatabaseSync): Router {
   r.get('/sync/agent', (req, res) => res.json(agentStatus(req.query['refresh'] === 'true')));
 
   r.post('/sync/run', (req, res) => {
-    const mode = String((req.body as { mode?: string }).mode ?? 'daily') as SyncMode;
+    const body = req.body as { mode?: string; lang?: string };
+    const mode = String(body.mode ?? 'daily') as SyncMode;
+    const lang = body.lang === 'en' ? 'en' : 'it';
     if (!['daily', 'docs', 'jira'].includes(mode)) return res.status(400).json({ error: 'mode must be daily, docs or jira' });
     try {
-      res.status(202).json(startSync(db, mode));
+      res.status(202).json(startSync(db, mode, lang));
     } catch (err) {
       const e = err as Error & { status?: number };
       res.status(e.status ?? 500).json({ error: e.message });

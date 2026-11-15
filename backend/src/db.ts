@@ -166,6 +166,26 @@ const MIGRATIONS: string[] = [
     imported     INTEGER NOT NULL DEFAULT 0
   );
   `,
+  /* v5 — Outlook calendar (today's meetings) */ `
+  CREATE TABLE calendar_events (
+    id             TEXT PRIMARY KEY,
+    subject        TEXT NOT NULL,
+    start_at       TEXT NOT NULL,
+    end_at         TEXT NOT NULL,
+    is_all_day     INTEGER NOT NULL DEFAULT 0,
+    location       TEXT,
+    online_url     TEXT,
+    organizer      TEXT,
+    organizer_name TEXT,
+    attendees      TEXT NOT NULL DEFAULT '[]',
+    show_as        TEXT,
+    is_cancelled   INTEGER NOT NULL DEFAULT 0,
+    is_organizer   INTEGER NOT NULL DEFAULT 0,
+    web_link       TEXT,
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX ix_calendar_start ON calendar_events(start_at);
+  `,
 ];
 
 export function openDb(file: string): DatabaseSync {

@@ -13,13 +13,14 @@ the analysis document?), and drops one snapshot file into the app's inbox. The b
 
 ## Modes
 
-| Request | Jira | Mail | Docs |
+| Request | Jira | Mail + calendar | Docs |
 |---|---|---|---|
-| "sync PJM" / "Jira and mail" / daily scheduled run | ✓ | ✓ | – |
+| "sync PJM" / "Jira, mail and calendar" / daily scheduled run | ✓ | ✓ | – |
 | "sync PJM docs" / "full sync" / Monday scheduled run | ✓ | ✓ | ✓ |
 | "sync PJM jira only" | ✓ | – | – |
 
-Jira always runs: the snapshot is the authoritative Jira picture (`complete: true`).
+Jira always runs: the snapshot is the authoritative Jira picture (`complete: true`). Mail and calendar always go
+together (the app's "Today's meetings" needs a fresh calendar every morning).
 
 The Jira rules are the same as the `controllo-pm` skill (DDMD project, archivagroup.atlassian.net, field
 `customfield_11738` = start date, overdue / at-risk / missing-data flags). Flags, RAG and which documents are
@@ -32,9 +33,13 @@ interactive `claude` session opened in the folder). You are here when `tools/bui
 working directory.
 - Files are local: read `data/registry.json` directly; no staging, no committing.
 - Working files go in `data/work/<timestamp>/` (git-ignored); write only there and to the inbox (via the builder).
+  Choose the folder name yourself from the current date/time (e.g. `data/work/20261116T0730/`) and create files
+  with the Write tool — it creates the folder. **Never use the shell for anything but the builder**: no `mkdir`,
+  no `date`, no shell variables (`$OUT`, `$env:…`), no `cd`/`&&` chains. Headless runs deny those.
 - When a connector result is too large and Claude Code saves it to a file, pass that file path straight to the
   builder — don't read or copy it.
-- Builder: `node tools/build-snapshot.ts … --out data/inbox/snapshot.json` (it writes atomically).
+- Builder: one plain command with literal paths, `node tools/build-snapshot.ts <arguments> --out data/inbox/snapshot.json`
+  (it writes atomically). The `--candidates` call is the same command with `--candidates`.
 - Headless runs (`-p`): nobody can answer questions or permission prompts — never ask; if a tool is denied, say
   which one in the final report. Your final message is shown in the app as the sync result.
 - Allowed tools are pre-approved in `.claude/settings.json` (read-only connector tools, the builder, writes under
@@ -107,6 +112,19 @@ Window: from `registry.lastSync.generatedAt` (minus 1 hour) to now; first run or
 
 Mail is incremental: threads not in this run stay as they are in the app (the user closes them).
 
+### Calendar → `calendar` files
+
+Range: from today (local date) to the end of the next working day — on Friday that is through Monday; on the
+weekend from today through Monday. `outlook_calendar_search` with `query: "*"`, `afterDateTime: <from date>`,
+`beforeDateTime: <day after the last day>`, `order: "oldest"`, `limit: 25`, paging with `offset`.
+- Result saved to a file → pass that path to the builder as is (it understands the raw tool output).
+- Result inline → write `calendar.json`: an array with each event object copied as returned (`id`, `subject`,
+  `start`, `end` as `{dateTime, timeZone}`, `isAllDay`, `location`, `organizer`, `organizerName`, `attendees`,
+  `showAs`, `isCancelled`, `isOrganizer`, `webLink`), plus `onlineUrl` when a Teams link appears in `summary`.
+  Keep every event (the app hides cancelled ones); don't drop or summarise.
+- Builder arguments: `--calendar <files> --calendar-from <YYYY-MM-DD> --calendar-to <YYYY-MM-DD, exclusive>`;
+  the app replaces its events in that range.
+
 ## 3. Documentation (docs mode only) → `docs.json`, `folders.json`
 
 For each **active** registry project with docs where `required && !waived && checkStatus != "present"`:
@@ -136,7 +154,8 @@ For each **active** registry project with docs where `required && !waived && che
 
 Arguments (omit the optional ones you have no file for):
 `--me <account_id> --site https://archivagroup.atlassian.net --epics … --phases … [--foreign …] [--subtasks …]
-[--mail mail.json] [--docs docs.json] [--folders folders.json] --out <out>`
+[--mail mail.json] [--calendar … --calendar-from … --calendar-to …] [--docs docs.json] [--folders folders.json]
+--out <out>`
 
 - **Local:** `node tools/build-snapshot.ts <arguments> --out data/inbox/snapshot.json` — done; the app imports it.
 - **Cowork:** `OUT=/mnt/user-data/outputs/pjm-sync/snapshot-$(date -u +%Y%m%dT%H%M%S).json` (a new name every
@@ -151,7 +170,7 @@ The builder validates categories/statuses and fails loudly — fix the input, do
 
 Brief, in the language of the request (Italian for scheduled runs and for the app's "Sync now"), neutral tone like
 `controllo-pm`: relay the builder's stdout (overdue / at-risk phases with open sub-tasks, mails needing a reply with
-urgency, doc gaps found), with natural names and links (`https://archivagroup.atlassian.net/browse/<KEY>`). In
+urgency, number of meetings synced, doc gaps found), with natural names and links (`https://archivagroup.atlassian.net/browse/<KEY>`). In
 Cowork add one line: the app imports the snapshot automatically if running, otherwise at next start (or **Import
 snapshot**). Don't attach the snapshot file to the chat unless asked. Unattended or headless runs: no questions —
 collect, build, deliver, report.

@@ -148,3 +148,21 @@ export interface SyncJob {
 }
 
 export interface AgentStatus { available: boolean; version: string | null; bin: string; running: boolean }
+
+export interface TodayActivity {
+  id: string; projectId: string | null; projectName: string | null; epicSummary: string | null; title: string;
+  phaseName: string | null; source: string; url: string | null; startDate: string | null; dueDate: string;
+  remainingHours: number | null; hoursToday: number | null; overdue: boolean; dueToday: boolean; flags: Flag[];
+  openSubtasks: { key: string; summary: string }[];
+}
+
+export interface Meeting {
+  id: string; subject: string; start: string; end: string; isAllDay: boolean; location: string | null;
+  onlineUrl: string | null; organizerName: string | null; isOrganizer: boolean; showAs: string | null;
+  webLink: string | null; attendeeCount: number; client: string | null; projectIds: string[];
+}
+
+export interface DayPlan {
+  today: string; day: string; isToday: boolean; capacityHours: number; activityHours: number; meetingHours: number;
+  activities: TodayActivity[]; meetings: Meeting[]; calendarSyncedAt: string | null;
+}

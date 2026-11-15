@@ -1,9 +1,15 @@
 <div class="shell">
   <aside class="sidebar">
-    <div class="brand">PJM <span>aid</span></div>
+    <div class="brand">
+      <span>PJM <span class="aid">aid</span></span>
+      <span class="lang" role="group" [attr.aria-label]="'lang.label' | t">
+        <button [class.on]="i18n.lang() === 'it'" (click)="i18n.setLang('it')" title="Italiano">IT</button>
+        <button [class.on]="i18n.lang() === 'en'" (click)="i18n.setLang('en')" title="English">EN</button>
+      </span>
+    </div>
     <nav>
       @for (item of nav; track item.path) {
-        <a [routerLink]="item.path" routerLinkActive="active">{{ item.label }}</a>
+        <a [routerLink]="item.path" routerLinkActive="active">{{ item.label | t }}</a>
       }
     </nav>
   </aside>

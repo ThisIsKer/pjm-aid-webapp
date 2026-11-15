@@ -77,6 +77,21 @@ server.registerTool('pjm_dashboard', {
   };
 }));
 
+server.registerTool('pjm_today', {
+  title: "Today's plan",
+  description: "The day plan: Jira phases planned for the day (hours to spend today = remaining estimate spread over the working days left; overdue ones in full), manual deadlines due, and Outlook meetings, with total load vs 8 h. On weekends it plans the next Monday. Optional date YYYY-MM-DD.",
+  inputSchema: { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() },
+  annotations: { readOnlyHint: true },
+}, tool(async ({ date }: { date?: string }) => {
+  const d = await api(`/today${date ? `?date=${date}` : ''}`);
+  return {
+    day: d.day, load: { activities: d.activityHours, meetings: d.meetingHours, capacity: d.capacityHours },
+    activities: d.activities.map((x: any) => ({ project: x.projectName, phase: x.phaseName ?? x.title, key: x.id,
+      hoursToday: x.hoursToday, remaining: x.remainingHours, due: x.dueDate, overdue: x.overdue })),
+    meetings: d.meetings.map((m: any) => ({ subject: m.subject, start: m.start, end: m.end, client: m.client, organizer: m.organizerName, join: m.onlineUrl })),
+  };
+}));
+
 server.registerTool('pjm_list_projects', {
   title: 'List projects',
   description: 'All projects with id, Jira epics, status, phase and counters. Hidden projects only with includeHidden.',

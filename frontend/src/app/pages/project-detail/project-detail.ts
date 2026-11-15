@@ -3,17 +3,20 @@ import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { Api } from '../../core/api';
+import { I18n, TPipe, jiraReason } from '../../core/i18n';
+import { AddDocDialog } from '../../shared/add-doc-dialog';
 import type { Deadline, DocRequirement, MailThread, ProjectDetail, Rag } from '../../core/models';
 import { FlagBadges } from '../../shared/flag-badges';
 import { RagDot } from '../../shared/rag-dot';
 
 @Component({
   selector: 'app-project-detail',
-  imports: [DatePipe, RouterLink, FlagBadges, RagDot],
+  imports: [DatePipe, RouterLink, FlagBadges, RagDot, TPipe, AddDocDialog],
   templateUrl: './project-detail.html',
 })
 export class ProjectDetailPage {
   private readonly api = inject(Api);
+  protected readonly i18n = inject(I18n);
   /** Route parameter (component input binding). */
   readonly id = input.required<string>();
   protected readonly project = httpResource<ProjectDetail>(() => `/api/projects/${encodeURIComponent(this.id())}`);
@@ -45,6 +48,7 @@ export class ProjectDetailPage {
     });
   }
 
+  protected reason = (p: ProjectDetail) => jiraReason(this.i18n, p);
   protected jiraUrl = (key: string) => `https://archivagroup.atlassian.net/browse/${key}`;
 
   protected async save() {
@@ -52,7 +56,7 @@ export class ProjectDetailPage {
       status: this.status(), phase: this.phase().trim() || null, pmNote: this.pmNote().trim() || null,
       sharepointUrl: this.sharepointUrl().trim() || null,
     } as never);
-    this.saved.set(`Saved ${new Date().toLocaleTimeString()}`);
+    this.saved.set(this.i18n.t('pd.saved', { t: new Date().toLocaleTimeString(this.i18n.locale(), { hour: '2-digit', minute: '2-digit' }) }));
     this.project.reload();
   }
 

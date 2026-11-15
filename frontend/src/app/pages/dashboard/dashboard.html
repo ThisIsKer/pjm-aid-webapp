@@ -1,37 +1,124 @@
 <header class="page-head">
-  <h1>Dashboard</h1>
+  <h1>{{ 'dash.title' | t }}</h1>
   <div class="meta">
     @if (data.value()?.lastSync; as s) {
-      <span>Last Claude sync: {{ s.generatedAt | date: 'dd/MM HH:mm' }}</span>
+      <span>{{ 'dash.lastSync' | t: { d: (s.generatedAt | date: 'dd/MM HH:mm' : undefined : i18n.locale()) } }}</span>
     } @else {
-      <span>No Claude sync yet</span>
+      <span>{{ 'dash.noSync' | t }}</span>
     }
     @if (syncMessage(); as m) { <span>· {{ m }}</span> }
-    <button (click)="importSnapshot()">Import snapshot</button>
-    <app-sync-button (finished)="data.reload()" />
+    <button (click)="importSnapshot()">{{ 'dash.import' | t }}</button>
+    <app-sync-button (finished)="reload()" />
   </div>
 </header>
 
 @if (data.error()) {
-  <div class="error">Backend not reachable. Is <code>npm run dev</code> running?</div>
+  <div class="error">{{ 'dash.backendDown' | t }}</div>
 }
 
 @if (data.value(); as d) {
   <section class="kpis">
-    <a class="kpi" routerLink="/projects"><div class="value">{{ d.kpis.activeProjects }}</div><div class="label">Active projects</div></a>
-    <div class="kpi" [class.alert]="d.kpis.overdue > 0"><div class="value">{{ d.kpis.overdue }}</div><div class="label">Overdue phases</div></div>
-    <div class="kpi" [class.warn]="d.kpis.atRisk > 0"><div class="value">{{ d.kpis.atRisk }}</div><div class="label">At risk (≤ 14 days, high remaining)</div></div>
-    <a class="kpi" routerLink="/mail" [class.alert]="d.kpis.needsReply > 0"><div class="value">{{ d.kpis.needsReply }}</div><div class="label">Mails to answer</div></a>
-    <a class="kpi" routerLink="/docs" [class.alert]="d.kpis.missingDocs > 0"><div class="value">{{ d.kpis.missingDocs }}</div><div class="label">Missing / outdated docs@if (d.kpis.uncheckedDocs) { · {{ d.kpis.uncheckedDocs }} not checked }</div></a>
+    <a class="kpi" routerLink="/projects"><div class="value">{{ d.kpis.activeProjects }}</div><div class="label">{{ 'kpi.projects' | t }}</div></a>
+    <div class="kpi" [class.alert]="d.kpis.overdue > 0"><div class="value">{{ d.kpis.overdue }}</div><div class="label">{{ 'kpi.overdue' | t }}</div></div>
+    <div class="kpi" [class.warn]="d.kpis.atRisk > 0"><div class="value">{{ d.kpis.atRisk }}</div><div class="label">{{ 'kpi.atRisk' | t }}</div></div>
+    <a class="kpi" routerLink="/mail" [class.alert]="d.kpis.needsReply > 0"><div class="value">{{ d.kpis.needsReply }}</div><div class="label">{{ 'kpi.mail' | t }}</div></a>
+    <a class="kpi" routerLink="/docs" [class.alert]="d.kpis.missingDocs > 0"><div class="value">{{ d.kpis.missingDocs }}</div>
+      <div class="label">{{ 'kpi.docs' | t }}@if (d.kpis.uncheckedDocs) { · {{ 'kpi.unchecked' | t: { n: d.kpis.uncheckedDocs } }} }</div></a>
   </section>
+}
 
+@if (plan.value(); as p) {
+  @if (!p.isToday) {
+    <div class="note small">{{ 'today.weekend' | t: { d: (p.day | date: 'EEEE d MMMM' : undefined : i18n.locale()) } }}</div>
+  }
+  <section class="grid two today">
+    <div class="card">
+      <div class="card-head">
+        <h2>{{ p.isToday ? ('today.title' | t) : ('today.titleFor' | t: { d: (p.day | date: 'EEEE d/MM' : undefined : i18n.locale()) }) }}</h2>
+        <span class="small muted">{{ 'today.load' | t: { a: p.activityHours, m: p.meetingHours, c: p.capacityHours } }}</span>
+      </div>
+      @if (load(); as l) {
+        <div class="loadbar" [class.over]="l.over">
+          <span class="act" [style.width.%]="l.activities"></span><span class="meet" [style.width.%]="l.meetings"></span>
+        </div>
+      }
+      @if (p.activities.length) {
+        <ul class="deadline-list">
+          @for (a of (showIdle() ? p.activities : activeActivities()); track a.id) {
+            <li>
+              <div>
+                <div>
+                  @if (a.url) { <a [href]="a.url" target="_blank">{{ a.epicSummary ?? a.projectName }} – {{ a.phaseName ?? a.title }}</a> }
+                  @else if (a.projectId) { <a [routerLink]="['/projects', a.projectId]">{{ a.projectName }} – {{ a.title }}</a> }
+                  @else { {{ a.title }} }
+                </div>
+                <div class="small muted">
+                  @if (a.remainingHours != null) { {{ 'dash.hoursLeft' | t: { h: a.remainingHours } }} · }
+                  {{ a.dueToday ? ('today.dueToday' | t) : ('today.due' | t: { d: (a.dueDate | date: 'dd/MM' : undefined : i18n.locale()) }) }}
+                  @if (a.openSubtasks.length) { · {{ 'pd.open' | t }} {{ a.openSubtasks[0].summary }}@if (a.openSubtasks.length > 1) {…} }
+                </div>
+              </div>
+              <div class="right">
+                @if (a.hoursToday != null) { <span class="hours">{{ 'today.hours' | t: { h: a.hoursToday } }}</span> }
+                @else { <span class="badge">{{ 'today.noEstimate' | t }}</span> }
+                @if (a.overdue) { <span class="badge red">{{ 'flag.overdue' | t }}</span> }
+              </div>
+            </li>
+          }
+        </ul>
+        @if (idleActivities().length) {
+          <button class="link small" (click)="showIdle.set(!showIdle())">{{ (showIdle() ? 'today.hideIdle' : 'today.showIdle') | t: { n: idleActivities().length } }}</button>
+        }
+      } @else {
+        <div class="empty">{{ 'today.none' | t }}</div>
+      }
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>{{ p.isToday ? ('meet.title' | t) : ('meet.titleFor' | t: { d: (p.day | date: 'EEEE d/MM' : undefined : i18n.locale()) }) }}</h2>
+      </div>
+      @if (p.meetings.length) {
+        <ul class="meetings">
+          @for (m of p.meetings; track m.id) {
+            <li [class.tentative]="isTentative(m)">
+              <div class="time">
+                @if (m.isAllDay) { {{ 'meet.allDay' | t }} }
+                @else { {{ m.start | date: 'HH:mm' : undefined : i18n.locale() }}<br /><span class="muted">{{ m.end | date: 'HH:mm' : undefined : i18n.locale() }}</span> }
+              </div>
+              <div class="what">
+                <div>
+                  @if (m.webLink) { <a [href]="m.webLink" target="_blank">{{ m.subject }}</a> } @else { {{ m.subject }} }
+                  @if (m.client) {
+                    @if (m.projectIds.length === 1) { <a class="badge" [routerLink]="['/projects', m.projectIds[0]]">{{ m.client }}</a> }
+                    @else { <span class="badge">{{ m.client }}</span> }
+                  }
+                </div>
+                <div class="small muted">
+                  {{ m.isOrganizer ? ('meet.you' | t) : ('meet.organizer' | t: { n: m.organizerName }) }}
+                  @if (isTentative(m)) { · {{ 'meet.tentative' | t }} }
+                </div>
+              </div>
+              @if (m.onlineUrl) { <a class="button" [href]="m.onlineUrl" target="_blank">{{ 'meet.join' | t }}</a> }
+            </li>
+          }
+        </ul>
+      } @else {
+        <div class="empty">{{ (p.calendarSyncedAt ? 'meet.none' : 'meet.noSync') | t }}</div>
+      }
+    </div>
+  </section>
+}
+
+@if (data.value(); as d) {
   <section class="grid two">
     <div class="card">
-      <h2>Projects</h2>
+      <h2>{{ 'dash.projects' | t }}</h2>
       @if (projects().length) {
         <table>
           <thead>
-            <tr><th></th><th>Project</th><th>Phase</th><th>Jira</th><th>Next due</th><th class="num">Data gaps</th><th class="num">Mails</th><th class="num">Docs</th></tr>
+            <tr><th></th><th>{{ 'col.project' | t }}</th><th>{{ 'col.phase' | t }}</th><th>{{ 'col.jira' | t }}</th><th>{{ 'col.nextDue' | t }}</th>
+              <th class="num">{{ 'col.dataGaps' | t }}</th><th class="num">{{ 'col.mails' | t }}</th><th class="num">{{ 'col.docs' | t }}</th></tr>
           </thead>
           <tbody>
             @for (p of projects(); track p.id) {
@@ -39,21 +126,21 @@
                 <td><app-rag-dot [status]="p.status" /></td>
                 <td>
                   <a class="plain" [routerLink]="['/projects', p.id]"><strong>{{ p.name }}</strong></a>
-                  @if (p.role === 'contributor') { <span class="badge">contributor</span> }
+                  @if (p.role === 'contributor') { <span class="badge">{{ 'common.contributor' | t }}</span> }
                   <div class="muted small">{{ p.jiraKeys.join(', ') }}</div>
                   @if (p.suggestedStatus && p.suggestedStatus !== p.status) {
-                    <div class="small"><span class="badge {{ p.suggestedStatus }}">Claude suggests {{ p.suggestedStatus }}</span> {{ p.suggestedReason }}</div>
+                    <div class="small"><span class="badge {{ p.suggestedStatus }}">{{ 'dash.claudeSuggests' | t: { s: ('rag.' + p.suggestedStatus | t) } }}</span> {{ p.suggestedReason }}</div>
                   }
                 </td>
                 <td>
                   @if (p.phase) { {{ p.phase }} }
                   @else if (p.currentPhase; as cp) {
-                    {{ cp.name }} @if (cp.startsOn) { <div class="muted small">from {{ cp.startsOn | date: 'dd/MM' }}</div> }
+                    {{ cp.name }} @if (cp.startsOn) { <div class="muted small">{{ 'common.from' | t: { d: (cp.startsOn | date: 'dd/MM' : undefined : i18n.locale()) } }}</div> }
                   } @else { <span class="muted">—</span> }
                 </td>
-                <td><span class="badge {{ p.jiraRag }}" [title]="p.jiraRagReason">{{ p.jiraRag === 'grey' ? 'n/a' : p.jiraRag }}</span>
-                  @if (p.overdue || p.atRisk) { <div class="muted small">{{ p.jiraRagReason }}</div> }</td>
-                <td>{{ p.nextDeadline ? (p.nextDeadline | date: 'dd/MM/yy') : '—' }}</td>
+                <td><span class="badge {{ p.jiraRag }}" [title]="reason(p)">{{ 'rag.' + p.jiraRag | t }}</span>
+                  @if (p.overdue || p.atRisk) { <div class="muted small">{{ reason(p) }}</div> }</td>
+                <td>{{ p.nextDeadline ? (p.nextDeadline | date: 'dd/MM/yy' : undefined : i18n.locale()) : '—' }}</td>
                 <td class="num">{{ p.dataGaps || '' }}</td>
                 <td class="num">{{ p.needsReply || '' }}</td>
                 <td class="num">{{ p.missingDocs || '' }}</td>
@@ -62,14 +149,14 @@
           </tbody>
         </table>
       } @else {
-        <div class="empty">No projects yet. They are created from your Jira epics at the first Claude sync.</div>
+        <div class="empty">{{ 'dash.noProjects' | t }}</div>
       }
     </div>
 
     <div class="card">
       <div class="card-head">
-        <h2>Due by {{ d.horizon | date: 'dd/MM' }} (and overdue)</h2>
-        <label class="small muted"><input type="checkbox" [checked]="onlyMine()" (change)="onlyMine.set(!onlyMine())" /> only mine</label>
+        <h2>{{ 'dash.dueBy' | t: { d: (d.horizon | date: 'dd/MM' : undefined : i18n.locale()) } }}</h2>
+        <label class="small muted"><input type="checkbox" [checked]="onlyMine()" (change)="onlyMine.set(!onlyMine())" /> {{ 'dash.onlyMine' | t }}</label>
       </div>
       @if (deadlines().length) {
         <ul class="deadline-list">
@@ -81,22 +168,22 @@
                   @else { {{ dl.projectName }} – {{ dl.title }} }
                 </div>
                 <div class="muted small">
-                  @if (dl.remainingHours != null) { {{ dl.remainingHours }}h left @if (dl.originalHours) { of {{ dl.originalHours }}h } }
+                  @if (dl.remainingHours != null) { {{ 'dash.hoursLeft' | t: { h: dl.remainingHours } }} @if (dl.originalHours) { {{ 'dash.ofHours' | t: { h: dl.originalHours } }} } }
                   @if (!dl.assignedToMe && dl.assignee) { · {{ dl.assignee }} }
                 </div>
                 @if (dl.openSubtasks.length) {
-                  <div class="small muted">Open: {{ dl.openSubtasks.length }} sub-task(s) — {{ dl.openSubtasks[0].summary }}@if (dl.openSubtasks.length > 1) {…}</div>
+                  <div class="small muted">{{ 'dash.openSubtasks' | t: { n: dl.openSubtasks.length, s: dl.openSubtasks[0].summary } }}@if (dl.openSubtasks.length > 1) {…}</div>
                 }
               </div>
               <div class="right">
-                <span class="badge" [class.red]="dl.flags.includes('overdue')">{{ dl.dueDate | date: 'dd/MM' }}</span>
+                <span class="badge" [class.red]="dl.flags.includes('overdue')">{{ dl.dueDate | date: 'dd/MM' : undefined : i18n.locale() }}</span>
                 <app-flag-badges [flags]="dl.flags" />
               </div>
             </li>
           }
         </ul>
       } @else {
-        <div class="empty">Nothing due. Phases arrive from Jira via the Claude sync.</div>
+        <div class="empty">{{ 'dash.nothingDue' | t }}</div>
       }
     </div>
   </section>

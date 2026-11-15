@@ -2,39 +2,40 @@ import { Component, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Api } from '../../core/api';
+import { I18n, TPipe } from '../../core/i18n';
 import type { MailCategory, MailThread } from '../../core/models';
 
 @Component({
   selector: 'app-mail',
-  imports: [DatePipe],
+  imports: [DatePipe, TPipe],
   template: `
-    <header class="page-head"><h1>Mail</h1></header>
+    <header class="page-head"><h1>{{ 'mail.title' | t }}</h1></header>
     <div class="tabs">
-      @for (t of tabs; track t.value) {
-        <button [class.active]="category() === t.value" (click)="category.set(t.value)">{{ t.label }}</button>
+      @for (c of categories; track c) {
+        <button [class.active]="category() === c" (click)="category.set(c)">{{ 'mail.tab.' + c | t }}</button>
       }
     </div>
     <div class="card">
       <table>
-        <thead><tr><th>Subject</th><th>Project</th><th>From / to</th><th>Last message</th><th></th></tr></thead>
+        <thead><tr><th>{{ 'col.subject' | t }}</th><th>{{ 'col.project' | t }}</th><th>{{ 'col.fromTo' | t }}</th><th>{{ 'col.last' | t }}</th><th></th></tr></thead>
         <tbody>
           @for (m of threads.value() ?? []; track m.id) {
             <tr>
               <td>
-                @if (m.urgency === 'high') { <span class="badge red">urgent</span> }
+                @if (m.urgency === 'high') { <span class="badge red">{{ 'common.urgent' | t }}</span> }
                 @if (m.webLink) { <a [href]="m.webLink" target="_blank">{{ m.subject }}</a> } @else { {{ m.subject }} }
                 @if (m.summary) { <div class="muted small">{{ m.summary }}</div> }
               </td>
               <td>{{ m.projectName ?? '—' }}</td>
               <td class="small">{{ m.counterpart }}</td>
-              <td class="small">{{ m.lastMessageAt | date: 'dd/MM HH:mm' }}@if (m.lastFromMe) { <div class="muted">last: me</div> }</td>
+              <td class="small">{{ m.lastMessageAt | date: 'dd/MM HH:mm' : undefined : i18n.locale() }}@if (m.lastFromMe) { <div class="muted">{{ 'mail.lastMe' | t }}</div> }</td>
               <td style="white-space: nowrap">
-                <button (click)="done(m)">Done</button>
-                <button (click)="snooze(m, 3)">Snooze 3d</button>
+                <button (click)="done(m)">{{ 'common.done' | t }}</button>
+                <button (click)="snooze(m, 3)">{{ 'mail.snooze' | t }}</button>
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="5" class="empty">Nothing here. Threads arrive from Outlook with each Claude sync (ask Claude to <em>sync PJM</em>).</td></tr>
+            <tr><td colspan="5" class="empty">{{ 'mail.empty' | t }}</td></tr>
           }
         </tbody>
       </table>
@@ -43,11 +44,8 @@ import type { MailCategory, MailThread } from '../../core/models';
 })
 export class MailPage {
   private readonly api = inject(Api);
-  protected readonly tabs: { value: MailCategory; label: string }[] = [
-    { value: 'needs_reply', label: 'Needs my reply' },
-    { value: 'waiting', label: 'Waiting on others' },
-    { value: 'fyi', label: 'FYI' },
-  ];
+  protected readonly i18n = inject(I18n);
+  protected readonly categories: MailCategory[] = ['needs_reply', 'waiting', 'fyi'];
   protected readonly category = signal<MailCategory>('needs_reply');
   protected readonly threads = httpResource<MailThread[]>(() => `/api/mail?category=${this.category()}`);
 

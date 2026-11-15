@@ -38,6 +38,15 @@ export interface SnapshotV2 {
     lastFromMe?: boolean; category: 'needs_reply' | 'waiting' | 'fyi'; urgency?: 'high' | 'normal' | 'low';
     summary?: string; webLink?: string;
   }[];
+  /** Outlook calendar for a date range: events in [from, to) replace what the app had for that range. */
+  calendar?: {
+    from: string; to: string;
+    events: {
+      id: string; subject: string; start: string; end: string; isAllDay?: boolean; location?: string | null;
+      onlineUrl?: string | null; organizer?: string | null; organizerName?: string | null; attendees?: string[];
+      showAs?: string | null; isCancelled?: boolean; isOrganizer?: boolean; webLink?: string | null;
+    }[];
+  };
   docChecks?: { requirementId: string; status: 'missing' | 'present' | 'outdated' | 'unknown'; foundUrl?: string; checkedAt?: string }[];
 }
 
@@ -68,7 +77,7 @@ const notIn = (ids: string[], col = 'id') => (ids.length ? `AND ${col} NOT IN ($
 export function importSnapshot(db: DatabaseSync, snap: SnapshotV2, hash: string | null = null): ImportResult {
   const warnings: string[] = [];
   const counts = {
-    epics: 0, projectsCreated: 0, phases: 0, projects: 0, projectFolders: 0, mailThreads: 0, docChecks: 0,
+    epics: 0, projectsCreated: 0, phases: 0, projects: 0, projectFolders: 0, mailThreads: 0, docChecks: 0, calendarEvents: 0,
     closedPhases: 0, closedEpics: 0, deactivatedProjects: 0,
   };
 
@@ -165,6 +174,20 @@ export function importSnapshot(db: DatabaseSync, snap: SnapshotV2, hash: string 
       upsertMail.run(m.id, projectId, m.subject, m.counterpart ?? null, m.lastMessageAt ?? null, m.lastFromMe ? 1 : 0,
         m.category, m.urgency ?? 'normal', m.summary ?? null, m.webLink ?? null);
       counts.mailThreads++;
+    }
+
+    // ---------- Calendar (replace the synced range) ----------
+    if (snap.calendar) {
+      const { from, to, events } = snap.calendar;
+      db.prepare('DELETE FROM calendar_events WHERE start_at >= ? AND start_at < ?').run(from, to);
+      const ins = db.prepare(`INSERT OR REPLACE INTO calendar_events (id, subject, start_at, end_at, is_all_day, location, online_url,
+        organizer, organizer_name, attendees, show_as, is_cancelled, is_organizer, web_link) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      for (const e of events) {
+        ins.run(e.id, e.subject, e.start, e.end, e.isAllDay ? 1 : 0, e.location ?? null, e.onlineUrl ?? null, e.organizer ?? null,
+          e.organizerName ?? null, JSON.stringify(e.attendees ?? []), e.showAs ?? null, e.isCancelled ? 1 : 0, e.isOrganizer ? 1 : 0,
+          e.webLink ?? null);
+        counts.calendarEvents++;
+      }
     }
 
     // ---------- Documentation checks ----------

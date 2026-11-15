@@ -34,6 +34,18 @@ export function addDays(iso: string, n: number): string {
   return d.toLocaleDateString('sv-SE');
 }
 
+const isWeekend = (iso: string) => [0, 6].includes(new Date(`${iso}T12:00:00`).getDay());
+
+/** The day to plan for: today on weekdays, otherwise the next Monday. */
+export function planDay(today: string): string {
+  let d = today;
+  while (isWeekend(d)) d = addDays(d, 1);
+  return d;
+}
+
+/** Working days from `from` to `due`, both included (at least 1). */
+export const workdaysInclusive = (from: string, due: string) => Math.max(1, workdaysUntil(addDays(from, -1), due));
+
 /** Working days (Mon–Fri, holidays ignored) from the day after `today` up to and including `due`. */
 export function workdaysUntil(today: string, due: string): number {
   let n = 0;

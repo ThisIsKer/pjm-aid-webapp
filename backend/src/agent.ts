@@ -10,11 +10,14 @@ import { toApi, toApiList } from './util.ts';
  */
 export type SyncMode = 'daily' | 'docs' | 'jira';
 
-const PROMPTS: Record<SyncMode, string> = {
-  daily: 'Run the pjm-sync skill in local mode (you are invoked by the PJM aid app in its repo folder): Jira and mail.',
-  docs: 'Run the pjm-sync skill in local mode (you are invoked by the PJM aid app in its repo folder): full sync with docs (Jira, mail and documentation checks).',
-  jira: 'Run the pjm-sync skill in local mode (you are invoked by the PJM aid app in its repo folder): Jira only.',
+const SCOPE: Record<SyncMode, string> = {
+  daily: 'Jira, mail and calendar',
+  docs: 'full sync with docs (Jira, mail, calendar and documentation checks)',
+  jira: 'Jira only',
 };
+const prompt = (mode: SyncMode, lang: 'it' | 'en') =>
+  `Run the pjm-sync skill in local mode (you are invoked headless by the PJM aid app in its repo folder): ${SCOPE[mode]}. ` +
+  `Write the final report in ${lang === 'en' ? 'English' : 'Italian'}.`;
 const TIMEOUT_MS = 25 * 60 * 1000;
 const bin = () => process.env['PJM_CLAUDE_BIN'] ?? 'claude';
 const isWin = process.platform === 'win32';
@@ -37,18 +40,19 @@ export function agentStatus(refresh = false) {
   return { ...agentInfo, running: !!current };
 }
 
-/** Human label for a tool call seen in the stream. */
-function labelFor(tool: string): string {
+/** Step code for a tool call seen in the stream (translated by the frontend: sync.step.<code>). */
+function stepFor(tool: string): string {
   const t = tool.toLowerCase();
-  if (t === 'skill') return 'Loading the pjm-sync skill';
-  if (t.includes('atlassianuserinfo')) return 'Jira: identifying you';
-  if (t.includes('searchjiraissues')) return 'Jira: reading epics and phases';
-  if (t.includes('confluence')) return 'Confluence: checking product documentation';
-  if (t.includes('outlook') || t.endsWith('__get_me')) return 'Outlook: reading mail';
-  if (t.includes('sharepoint') || t.includes('read_resource')) return 'SharePoint: checking project documents';
-  if (t === 'bash' || t === 'powershell') return 'Building the snapshot';
-  if (t === 'write' || t === 'edit') return 'Writing working files';
-  if (t === 'read' || t === 'glob' || t === 'grep') return 'Reading app files';
+  if (t === 'skill') return 'skill';
+  if (t.includes('atlassianuserinfo')) return 'jiraUser';
+  if (t.includes('searchjiraissues')) return 'jira';
+  if (t.includes('confluence')) return 'confluence';
+  if (t.includes('calendar')) return 'calendar';
+  if (t.includes('outlook') || t.endsWith('__get_me')) return 'mail';
+  if (t.includes('sharepoint') || t.includes('read_resource')) return 'sharepoint';
+  if (t === 'bash' || t === 'powershell') return 'build';
+  if (t === 'write' || t === 'edit') return 'write';
+  if (t === 'read' || t === 'glob' || t === 'grep' || t === 'toolsearch') return 'read';
   return tool;
 }
 
@@ -58,7 +62,7 @@ function save(db: DatabaseSync, job: Job) {
     job.resultText ?? null, JSON.stringify(job.denials), job.error ?? null, job.costUsd ?? null, job.imported ? 1 : 0, job.id);
 }
 
-export function startSync(db: DatabaseSync, mode: SyncMode): Job {
+export function startSync(db: DatabaseSync, mode: SyncMode, lang: 'it' | 'en' = 'it'): Job {
   if (current) throw Object.assign(new Error('A sync is already running'), { status: 409 });
   if (!agentStatus().available) throw Object.assign(new Error(`Claude Code not found ("${bin()} --version" failed)`), { status: 503 });
 
@@ -71,7 +75,7 @@ export function startSync(db: DatabaseSync, mode: SyncMode): Job {
     cwd: config.root, shell: isWin, windowsHide: true, env: { ...process.env },
   });
   current = { job, child };
-  child.stdin?.end(PROMPTS[mode]);
+  child.stdin?.end(prompt(mode, lang));
 
   const addStep = (label: string) => {
     const last = job.steps.at(-1);
@@ -79,7 +83,7 @@ export function startSync(db: DatabaseSync, mode: SyncMode): Job {
     else job.steps.push({ at: new Date().toISOString(), label, count: 1 });
     if (job.steps.length > 40) job.steps.shift();
   };
-  addStep('Starting Claude Code');
+  addStep('start');
 
   let buffer = '';
   let stderr = '';
@@ -93,11 +97,16 @@ export function startSync(db: DatabaseSync, mode: SyncMode): Job {
       try {
         const msg = JSON.parse(line) as Record<string, any>;
         if (msg['type'] === 'assistant') {
-          for (const c of msg['message']?.content ?? []) if (c.type === 'tool_use') addStep(labelFor(String(c.name)));
+          for (const c of msg['message']?.content ?? []) if (c.type === 'tool_use') addStep(stepFor(String(c.name)));
         } else if (msg['type'] === 'result') {
           job.resultText = typeof msg['result'] === 'string' ? msg['result'] : undefined;
           job.costUsd = typeof msg['total_cost_usd'] === 'number' ? msg['total_cost_usd'] : undefined;
-          job.denials = (msg['permission_denials'] ?? []).map((d: any) => String(d.tool_name ?? d.toolName ?? JSON.stringify(d)));
+          // Keep what was denied and, for shell commands, the command itself (shown in the app).
+          job.denials = (msg['permission_denials'] ?? []).map((d: any) => {
+            const input = d.tool_input ?? d.toolInput ?? {};
+            const detail = input.command ?? input.file_path ?? input.path ?? '';
+            return `${d.tool_name ?? d.toolName ?? '?'}${detail ? `: ${String(detail).slice(0, 160)}` : ''}`;
+          });
           if (msg['is_error']) job.error = job.resultText ?? String(msg['subtype'] ?? 'error');
         }
       } catch {
@@ -125,7 +134,6 @@ export function startSync(db: DatabaseSync, mode: SyncMode): Job {
       const last = db.prepare('SELECT imported_at FROM sync_runs ORDER BY id DESC LIMIT 1').get() as { imported_at: string } | undefined;
       job.imported = !!last && new Date(`${last.imported_at.replace(' ', 'T')}Z`) >= new Date(job.startedAt);
       job.status = job.error ? 'error' : 'ok';
-      if (!job.error && !job.imported) job.resultText = `${job.resultText ?? ''}\n\n(No new snapshot was imported.)`.trim();
       save(db, job);
       current = null;
     }, 3000);

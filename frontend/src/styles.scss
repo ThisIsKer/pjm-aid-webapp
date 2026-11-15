@@ -24,8 +24,11 @@ h2 { font-size: 15px; margin: 0 0 12px; }
 
 .shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
 .sidebar { background: #161b26; color: #cfd5e2; padding: 20px 12px; }
-.sidebar .brand { font-weight: 700; font-size: 18px; color: #fff; padding: 0 10px 20px; }
-.sidebar .brand span { color: #7da2ff; font-weight: 400; }
+.sidebar .brand { font-weight: 700; font-size: 18px; color: #fff; padding: 0 10px 20px; display: flex; align-items: center; justify-content: space-between; }
+.sidebar .brand .aid { color: #7da2ff; font-weight: 400; }
+.sidebar .lang { display: inline-flex; border: 1px solid #2b3550; border-radius: 6px; overflow: hidden; }
+.sidebar .lang button { border: 0; border-radius: 0; background: transparent; color: #8a93a8; font-size: 11px; font-weight: 600; padding: 3px 7px; }
+.sidebar .lang button.on { background: #2b3550; color: #fff; }
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
 .sidebar a { color: inherit; text-decoration: none; padding: 9px 10px; border-radius: 6px; }
 .sidebar a:hover { background: #222a3a; }
@@ -98,3 +101,23 @@ app-sync-button { position: relative; }
 .sync-panel .result { white-space: pre-wrap; max-height: 260px; overflow: auto; background: var(--bg); border-radius: 6px; padding: 8px; }
 .warn { color: #9a6200; margin: 6px 0; }
 .key { margin-left: 6px; }
+
+.today { margin-bottom: 16px; }
+.note { background: #eef3ff; color: #2b3e7a; border-radius: var(--radius); padding: 8px 12px; margin-bottom: 12px; }
+.loadbar { display: flex; height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; margin: -4px 0 8px; }
+.loadbar .act { background: var(--accent); }
+.loadbar .meet { background: #9b6ef3; }
+.loadbar.over { outline: 1px solid var(--red); }
+.hours { font-weight: 600; font-variant-numeric: tabular-nums; }
+.meetings { list-style: none; margin: 0; padding: 0; }
+.meetings li { display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.meetings li:last-child { border-bottom: 0; }
+.meetings li.tentative .what { opacity: .75; }
+.meetings .time { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 13px; line-height: 1.2; }
+.meetings .badge { margin-left: 6px; text-decoration: none; }
+a.button { font-size: 12px; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; text-decoration: none; }
+a.button:hover { border-color: var(--accent); }
+.dialog { border: 0; border-radius: var(--radius); padding: 20px; width: 520px; max-width: 92vw; box-shadow: 0 16px 48px rgba(0,0,0,.25); }
+.dialog::backdrop { background: rgba(20, 24, 36, .45); }
+.dialog .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
