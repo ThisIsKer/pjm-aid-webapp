@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-15T07:30:00+01:00",
+  "complete": true,
+  "projects": [
+    { "id": "acme-einvoicing", "suggestedStatus": "amber", "suggestedReason": "Design phase due in 3 days with 24h remaining estimate." }
+  ],
+  "deadlines": [
+    { "id": "DDMD-101", "projectId": "acme-einvoicing", "title": "Design – specifica tecnica", "dueDate": "2026-11-18", "source": "jira", "sourceRef": "DDMD-101", "assignee": "Sebastiano", "remainingHours": 24 },
+    { "id": "DDMD-201", "projectId": "globex-dms", "title": "UAT ciclo 2", "dueDate": "2026-11-10", "source": "jira", "sourceRef": "DDMD-201", "remainingHours": 6 }
+  ],
+  "mailThreads": [
+    {
+      "id": "AAQkAGI2-example-conversation-id",
+      "projectId": "acme-einvoicing",
+      "subject": "RE: Mapping codici IVA",
+      "counterpart": "mario.rossi@acme.example",
+      "lastMessageAt": "2026-11-13T16:42:00+01:00",
+      "lastFromMe": false,
+      "category": "needs_reply",
+      "urgency": "high",
+      "summary": "Asks for confirmation of the VAT code mapping before Tuesday's go-live check.",
+      "webLink": "https://outlook.office.com/mail/"
+    }
+  ],
+  "docChecks": [
+    { "requirementId": "acme-einvoicing--analisi-funzionale", "status": "present", "foundUrl": "https://example.sharepoint.com/sites/acme-einvoicing/AF.docx" },
+    { "requirementId": "acme-einvoicing--specifica-tecnica", "status": "missing" },
+    { "requirementId": "globex-dms--report-di-migrazione", "status": "outdated" }
+  ]
+}

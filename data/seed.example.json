@@ -1,0 +1,35 @@
+{
+  "$comment": "Copy to data/seed.json (git-ignored) and replace with your real projects. Loaded only when the database is empty — run `npm run db:reset` to reload.",
+  "docTemplate": [
+    { "phase": "Analysis", "title": "Analisi funzionale", "repository": "sharepoint", "locationHint": "Teams > Documents > 01 Analisi" },
+    { "phase": "Design", "title": "Specifica tecnica", "repository": "sharepoint", "locationHint": "Teams > Documents > 02 Design" },
+    { "phase": "Test", "title": "Piano di test / UAT", "repository": "sharepoint", "locationHint": "Teams > Documents > 03 Test" },
+    { "phase": "Closing", "title": "Verbale di collaudo", "repository": "sharepoint", "locationHint": "Teams > Documents > 04 Chiusura" },
+    { "phase": "Closing", "title": "Documentazione di prodotto aggiornata", "repository": "confluence" }
+  ],
+  "projects": [
+    {
+      "id": "acme-einvoicing",
+      "name": "ACME – E-invoicing rollout",
+      "client": "ACME S.p.A.",
+      "phase": "Design",
+      "jiraKeys": ["DDMD-100"],
+      "sharepointUrl": "https://example.sharepoint.com/sites/acme-einvoicing",
+      "confluenceSpace": "PROD",
+      "mailKeywords": ["ACME", "e-invoicing"],
+      "mailDomains": ["acme.example"]
+    },
+    {
+      "id": "globex-dms",
+      "name": "Globex – DMS migration",
+      "client": "Globex Corp.",
+      "phase": "Test",
+      "jiraKeys": ["DDMD-200"],
+      "mailKeywords": ["Globex", "migrazione"],
+      "mailDomains": ["globex.example"],
+      "docs": [
+        { "phase": "Test", "title": "Report di migrazione", "repository": "sharepoint" }
+      ]
+    }
+  ]
+}

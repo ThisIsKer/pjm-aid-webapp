@@ -1,0 +1,79 @@
+<header class="page-head">
+  <h1>Dashboard</h1>
+  <div class="meta">
+    @if (data.value()?.lastSync; as s) {
+      <span>Last Claude sync: {{ s.generatedAt | date: 'dd/MM HH:mm' }}</span>
+    } @else {
+      <span>No Claude sync yet</span>
+    }
+    @if (syncMessage(); as m) { <span>· {{ m }}</span> }
+    <button (click)="importSnapshot()">Import snapshot</button>
+  </div>
+</header>
+
+@if (data.error()) {
+  <div class="error">Backend not reachable. Is <code>npm run dev</code> running?</div>
+}
+
+@if (data.value(); as d) {
+  <section class="kpis">
+    <a class="kpi" routerLink="/projects"><div class="value">{{ d.kpis.activeProjects }}</div><div class="label">Active projects</div></a>
+    <div class="kpi" [class.alert]="d.kpis.overdue > 0"><div class="value">{{ d.kpis.overdue }}</div><div class="label">Overdue deadlines</div></div>
+    <div class="kpi"><div class="value">{{ d.kpis.dueSoon }}</div><div class="label">Due by {{ d.horizon | date: 'dd/MM' }}</div></div>
+    <a class="kpi" routerLink="/mail" [class.alert]="d.kpis.needsReply > 0"><div class="value">{{ d.kpis.needsReply }}</div><div class="label">Mails to answer</div></a>
+    <a class="kpi" routerLink="/docs" [class.alert]="d.kpis.missingDocs > 0"><div class="value">{{ d.kpis.missingDocs }}</div><div class="label">Missing / outdated docs</div></a>
+  </section>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>Projects</h2>
+      @if (d.projects.length) {
+        <table>
+          <thead>
+            <tr><th></th><th>Project</th><th>Phase</th><th>Next deadline</th><th class="num">Overdue</th><th class="num">Mails</th><th class="num">Doc gaps</th></tr>
+          </thead>
+          <tbody>
+            @for (p of d.projects; track p.id) {
+              <tr>
+                <td><app-rag-dot [status]="p.status" /></td>
+                <td>
+                  <strong>{{ p.name }}</strong>
+                  <div class="muted small">{{ p.client }}</div>
+                  @if (p.suggestedStatus && p.suggestedStatus !== p.status) {
+                    <div class="small"><span class="badge {{ p.suggestedStatus }}">Claude suggests {{ p.suggestedStatus }}</span> {{ p.suggestedReason }}</div>
+                  }
+                </td>
+                <td>{{ p.phase ?? '—' }}</td>
+                <td>{{ p.nextDeadline ? (p.nextDeadline | date: 'dd/MM/yyyy') : '—' }}</td>
+                <td class="num">@if (p.overdue) { <span class="badge red">{{ p.overdue }}</span> } @else { 0 }</td>
+                <td class="num">{{ p.needsReply }}</td>
+                <td class="num">{{ p.missingDocs }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <div class="empty">No projects yet. Add them to <code>data/seed.json</code> and restart the backend.</div>
+      }
+    </div>
+
+    <div class="card">
+      <h2>Deadlines (overdue and next {{ d.horizon | date: 'dd/MM' }})</h2>
+      @if (d.deadlines.length) {
+        <ul class="deadline-list">
+          @for (dl of d.deadlines; track dl.id) {
+            <li>
+              <div>
+                <div>{{ dl.title }}</div>
+                <div class="muted small">{{ dl.projectName }} @if (dl.sourceRef) { · {{ dl.sourceRef }} } @if (dl.remainingHours) { · {{ dl.remainingHours }}h left }</div>
+              </div>
+              <span class="badge" [class.red]="dl.dueDate! < d.today">{{ dl.dueDate | date: 'dd/MM' }}</span>
+            </li>
+          }
+        </ul>
+      } @else {
+        <div class="empty">Nothing due. Deadlines arrive from Jira via the Claude sync.</div>
+      }
+    </div>
+  </section>
+}

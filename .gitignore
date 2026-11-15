@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.angular/
+*.log
+.env
+.env.*
+
+# Local data: real project registry, database and Claude snapshots stay on this machine
+data/*
+!data/README.md
+!data/seed.example.json
+!data/inbox/
+data/inbox/*
+!data/inbox/.gitkeep
+
+.DS_Store
+Thumbs.db
