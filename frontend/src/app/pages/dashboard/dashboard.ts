@@ -6,12 +6,13 @@ import { Api } from '../../core/api';
 import type { Dashboard, Project, Rag } from '../../core/models';
 import { FlagBadges } from '../../shared/flag-badges';
 import { RagDot } from '../../shared/rag-dot';
+import { SyncButton } from '../../shared/sync-button';
 
 const SEVERITY: Record<Rag, number> = { red: 0, amber: 1, green: 2, grey: 3 };
 
 @Component({
   selector: 'app-dashboard',
-  imports: [DatePipe, RouterLink, RagDot, FlagBadges],
+  imports: [DatePipe, RouterLink, RagDot, FlagBadges, SyncButton],
   templateUrl: './dashboard.html',
 })
 export class DashboardPage {

@@ -8,6 +8,7 @@
     }
     @if (syncMessage(); as m) { <span>· {{ m }}</span> }
     <button (click)="importSnapshot()">Import snapshot</button>
+    <app-sync-button (finished)="data.reload()" />
   </div>
 </header>
 
@@ -37,7 +38,7 @@
               <tr>
                 <td><app-rag-dot [status]="p.status" /></td>
                 <td>
-                  <strong>{{ p.name }}</strong>
+                  <a class="plain" [routerLink]="['/projects', p.id]"><strong>{{ p.name }}</strong></a>
                   @if (p.role === 'contributor') { <span class="badge">contributor</span> }
                   <div class="muted small">{{ p.jiraKeys.join(', ') }}</div>
                   @if (p.suggestedStatus && p.suggestedStatus !== p.status) {

@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { httpResource } from '@angular/common/http';
 import { Api } from '../../core/api';
 import type { Project, Rag } from '../../core/models';
@@ -7,7 +8,7 @@ import { RagDot } from '../../shared/rag-dot';
 
 @Component({
   selector: 'app-projects',
-  imports: [DatePipe, RagDot],
+  imports: [DatePipe, RagDot, RouterLink],
   template: `
     <header class="page-head">
       <h1>Projects</h1>
@@ -27,13 +28,13 @@ import { RagDot } from '../../shared/rag-dot';
             <tr [class.muted]="!p.active">
               <td><app-rag-dot [status]="p.status" /></td>
               <td>
-                <strong>{{ p.name }}</strong>
+                <a class="plain" [routerLink]="['/projects', p.id]"><strong>{{ p.name }}</strong></a>
                 @if (p.role === 'contributor') { <span class="badge">contributor</span> }
                 <div class="small">@for (k of p.jiraKeys; track k) { <a [href]="jiraUrl(k)" target="_blank">{{ k }}</a>&nbsp; }</div>
               </td>
               <td>
                 <select [value]="p.status" (change)="setStatus(p, $any($event.target).value)">
-                  @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
+                  @for (s of statuses; track s) { <option [value]="s" [selected]="s === p.status">{{ s }}</option> }
                 </select>
               </td>
               <td>{{ p.phase ?? p.currentPhase?.name ?? '—' }}</td>

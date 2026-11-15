@@ -1,0 +1,21 @@
+{
+  "$comment": "Project permissions for the pjm-sync skill (used by the app's 'Sync now' headless runs and by interactive sessions in this folder): read-only connector tools, the snapshot builder, and writes under data/work only.",
+  "permissions": {
+    "allow": [
+      "Skill(pjm-sync)",
+      "Write(./data/work/**)",
+      "Edit(./data/work/**)",
+      "Bash(node tools/build-snapshot.ts *)",
+      "PowerShell(node tools/build-snapshot.ts *)",
+      "mcp__claude_ai_Atlassian_Rovo__atlassianUserInfo",
+      "mcp__claude_ai_Atlassian_Rovo__getAccessibleAtlassianResources",
+      "mcp__claude_ai_Atlassian_Rovo__searchJiraIssuesUsingJql",
+      "mcp__claude_ai_Atlassian_Rovo__searchConfluenceUsingCql",
+      "mcp__claude_ai_Microsoft_365__get_me",
+      "mcp__claude_ai_Microsoft_365__outlook_email_search",
+      "mcp__claude_ai_Microsoft_365__sharepoint_search",
+      "mcp__claude_ai_Microsoft_365__sharepoint_folder_search",
+      "mcp__claude_ai_Microsoft_365__read_resource"
+    ]
+  }
+}

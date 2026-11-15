@@ -28,7 +28,7 @@
     }
   ],
   "docChecks": [
-    { "requirementId": "DDMD-100--analisi-funzionale", "status": "present", "foundUrl": "https://example.sharepoint.com/sites/acme/AF.docx" },
-    { "requirementId": "DDMD-100--specifica-tecnica", "status": "missing" }
+    { "requirementId": "DDMD-100--documento-di-analisi", "status": "present", "foundUrl": "https://example.sharepoint.com/sites/acme/AF.docx" },
+    { "requirementId": "DDMD-100--open-topics-log", "status": "missing" }
   ]
 }

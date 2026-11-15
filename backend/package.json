@@ -7,10 +7,13 @@
     "dev": "node --watch --disable-warning=ExperimentalWarning src/server.ts",
     "start": "node --disable-warning=ExperimentalWarning src/server.ts",
     "typecheck": "tsc --noEmit",
-    "db:reset": "node --disable-warning=ExperimentalWarning src/reset-db.ts"
+    "db:reset": "node --disable-warning=ExperimentalWarning src/reset-db.ts",
+    "mcp": "node --disable-warning=ExperimentalWarning src/mcp.ts"
   },
   "dependencies": {
-    "express": "^5.1.0"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "express": "^5.1.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",

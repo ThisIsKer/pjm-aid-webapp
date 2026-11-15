@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import { agentStatus, currentOrLastJob, recentJobs, startSync, type SyncMode } from './agent.ts';
 import { config } from './config.ts';
 import { addDays, isoToday } from './flags.ts';
 import { ACTIVE_MAIL, getProjectRow, loadDeadlines, loadProjects } from './projects.ts';
@@ -206,6 +207,23 @@ export function apiRouter(db: DatabaseSync): Router {
   r.post('/sync/import', (req, res) => {
     res.json(importSnapshotIfPresent(db, config.snapshotFile, req.query['force'] === 'true'));
   });
+
+  // ---------- Sync now (Claude Code headless) ----------
+  r.get('/sync/agent', (req, res) => res.json(agentStatus(req.query['refresh'] === 'true')));
+
+  r.post('/sync/run', (req, res) => {
+    const mode = String((req.body as { mode?: string }).mode ?? 'daily') as SyncMode;
+    if (!['daily', 'docs', 'jira'].includes(mode)) return res.status(400).json({ error: 'mode must be daily, docs or jira' });
+    try {
+      res.status(202).json(startSync(db, mode));
+    } catch (err) {
+      const e = err as Error & { status?: number };
+      res.status(e.status ?? 500).json({ error: e.message });
+    }
+  });
+
+  r.get('/sync/jobs/current', (_req, res) => res.json(currentOrLastJob(db)));
+  r.get('/sync/jobs', (_req, res) => res.json(recentJobs(db)));
 
   r.get('/sync/runs', (_req, res) => {
     res.json(toApiList(db.prepare('SELECT * FROM sync_runs ORDER BY id DESC LIMIT 20').all()));

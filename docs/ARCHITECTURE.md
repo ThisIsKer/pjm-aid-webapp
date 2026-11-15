@@ -21,7 +21,8 @@ It answers four questions: **how are my projects doing, what is due, which mails
  │   Express 5 REST API  :4310                                │
  │   SQLite via built-in node:sqlite  → data/pjm.db           │
  │   watches data/inbox/ and imports each new snapshot        │
- │   (phase 4) MCP endpoint so Claude can read/write the DB   │
+ │   "Sync now" → claude -p (Claude Code) runs pjm-sync here  │
+ │   backend/src/mcp.ts: stdio MCP server over the REST API   │
  │                                                            │
  │ frontend/ Angular 22 · standalone · signals · httpResource │
  │   dev: ng serve :4200 (proxy /api → :4310)                 │
@@ -126,12 +127,12 @@ Verbale di collaudo UAT · Piano di cutover / go-live · Documentazione di prodo
 stages it to know projects, current phases, SharePoint folders, the checklist with `required` flags, open mail
 threads and the last sync time.
 
-## 6. Database schema (v3)
+## 6. Database schema (v4)
 
 `projects` · `jira_epics` · `deadlines` (+ view `v_deadlines` resolving each phase's project through its epic) ·
-`mail_threads` · `doc_requirements` · `doc_template` · `sync_runs` — see `backend/src/db.ts`.
+`mail_threads` · `doc_requirements` · `doc_template` · `sync_runs` · `sync_jobs` — see `backend/src/db.ts`.
 Migrations are append-only and tracked with `PRAGMA user_version` (v3 adds `projects.sharepoint_folder_uri`,
-`required_from` / `client_match` / `from_template`). Requirement id = `<projectId>--<slug(title)>`, which is the id
+`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"). Requirement id = `<projectId>--<slug(title)>`, which is the id
 Claude reports back in `docChecks`.
 
 ## 7. Snapshot contract v2 (`data/inbox/snapshot.json`)
@@ -179,21 +180,36 @@ Full example: `docs/examples/snapshot.example.json`.
 | PATCH | `/docs/:id` | waive ("not needed") / edit hint |
 | POST | `/sync/import?force=true` | import the snapshot now |
 | GET | `/sync/runs` | last 20 imports with counts and warnings |
+| GET | `/sync/agent?refresh=true` | is Claude Code available (`claude --version`) |
+| POST | `/sync/run` | `{ mode: daily \| docs \| jira }` — start "Sync now" (409 if one is running) |
+| GET | `/sync/jobs/current` · `/sync/jobs` | running or last job (steps, result text, denied tools) · last 10 |
 
-## 9. Claude integration roadmap
+## 9. Claude integration
 
-1. **`pjm-sync` skill (Cowork)** — source in `claude/skills/pjm-sync/SKILL.md`. Jira (same scope as
-   `controllo-pm`), Outlook mail triage, and on request SharePoint/Confluence doc checks; runs
-   `tools/build-snapshot.ts` in the Claude workspace and commits `snapshot.json` into the folder. Triggered on
-   demand ("sync PJM", "sync PJM docs") and by a weekday-morning scheduled task (to set up at the end).
-2. **MCP server in the backend** — tools such as `list_projects`, `get_project`, `add_deadline`, `set_status`,
-   `mark_mail_done`, registered in the Claude desktop app as a local MCP server. Lets Claude answer
-   "what's late on IMA?" and update the board from any conversation.
-3. **"Sync now" button in the app (candidate)** — the backend would launch Claude Code headless
-   (`claude -p "sync PJM"`) in the repo folder, with the skill as a project skill under `.claude/skills/` and a
-   local variant of the steps (no staging: files are local). Prerequisites to verify first: Claude Code installed and
-   signed in on the laptop, Atlassian and Microsoft 365 connectors usable from Claude Code, company OK. Usage counts
-   against the Claude plan. Until then: ask Claude in Cowork, or rely on the scheduled task.
+1. **`pjm-sync` skill** — source of truth `.claude/skills/pjm-sync/SKILL.md` (a Claude Code project skill; the
+   same text is saved as a personal skill for Cowork). It works in two places:
+   - **Cowork** (cloud workspace + linked computer): stages the builder and `registry.json`, runs the builder in the
+     cloud workspace and commits `snapshot.json` into the folder. Used for "sync PJM" in chat and for the
+     scheduled task.
+   - **Local Claude Code** in the repo folder: reads `data/registry.json` directly, keeps working files in
+     `data/work/`, runs `node tools/build-snapshot.ts … --out data/inbox/snapshot.json` (atomic write).
+2. **"Sync now" button** (`backend/src/agent.ts`) — the backend runs Claude Code headless in the repo folder:
+   `claude -p --output-format stream-json --verbose --permission-prompts none`, prompt on stdin
+   ("Run the pjm-sync skill in local mode … Jira and mail / full sync with docs / Jira only"). Claude Code uses the
+   claude.ai Team login and its connectors (checked: Atlassian Rovo and Microsoft 365 connected, v2.1.318).
+   The stream is parsed into progress steps; the final message, cost and denied tools are stored in `sync_jobs`.
+   One run at a time, 25-minute timeout. Usage counts against the Claude plan.
+   **Permissions**: `.claude/settings.json` (committed) pre-approves only read-only connector tools
+   (Jira search / user info, Confluence search, Outlook search, SharePoint search / read, get_me), the builder
+   command and writes under `data/work/`. Anything else is denied and listed in the result panel.
+   `PJM_CLAUDE_BIN` overrides the `claude` executable.
+3. **MCP server** (`backend/src/mcp.ts`, stdio, talks to the running backend's REST API so the backend stays the
+   only writer). Tools: `pjm_dashboard`, `pjm_list_projects`, `pjm_get_project` (id, epic key or name),
+   `pjm_list_mail`, `pjm_update_mail` (done / snooze / reopen / assign), `pjm_doc_gaps`, `pjm_update_project`
+   (status, PM note, phase override, SharePoint link, hide/show), `pjm_add_deadline`, `pjm_waive_doc`,
+   `pjm_sync_status`. Register it in Claude Code with
+   `claude mcp add pjm-aid --scope user -- node <repo>\backend\src\mcp.ts`, and in the Claude desktop app
+   (so Cowork sessions linked to the laptop see it) under `mcpServers` in `claude_desktop_config.json`.
 4. **(Optional) in-app Claude actions** — "draft reply", "summarise thread" via the Anthropic API.
    Needs an API key and company approval for data use; deferred.
 
@@ -205,5 +221,5 @@ Full example: `docs/examples/snapshot.example.json`.
 | 1 | Skeleton: Angular + Node + SQLite, dashboard / projects / mail / docs pages | ✅ |
 | 2 | `pjm-sync` skill: Jira epics → projects, phases, controllo-pm flags, Jira RAG, auto-import | ✅ |
 | 3 | Mail triage via Outlook; phase-aware doc checks via SharePoint + Confluence; registry.json | ✅ |
-| 4 | MCP server; project detail page; manual editing UI; "Sync now" via Claude Code (if prerequisites hold) | next |
+| 4 | "Sync now" via Claude Code; MCP server; project detail page with editing (status, phase, note, SharePoint, manual deadlines, mail, docs) | ✅ |
 | 5 | Weekday-morning scheduled sync (daily Jira + mail, Monday + docs) | at the end |

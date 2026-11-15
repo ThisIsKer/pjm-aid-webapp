@@ -1,0 +1,122 @@
+@if (project.error()) {
+  <div class="error">Project not found or backend not reachable. <a routerLink="/projects">Back to projects</a></div>
+}
+@if (project.value(); as p) {
+  <header class="page-head">
+    <div>
+      <div class="small muted"><a routerLink="/projects">Projects</a> /</div>
+      <h1><app-rag-dot [status]="p.status" /> {{ p.name }}</h1>
+      <div class="small muted">
+        {{ p.client }} · {{ p.role === 'pm' ? 'PM' : 'contributor' }}
+        @for (k of p.jiraKeys; track k) { · <a [href]="jiraUrl(k)" target="_blank">{{ k }}</a> }
+        @if (p.sharepointUrl) { · <a [href]="p.sharepointUrl" target="_blank">SharePoint folder</a> }
+      </div>
+    </div>
+    <div class="meta">
+      <span class="badge {{ p.jiraRag }}" [title]="p.jiraRagReason">Jira: {{ p.jiraRag === 'grey' ? 'n/a' : p.jiraRag }}</span>
+      <span>{{ p.jiraRagReason }}</span>
+      <button (click)="toggleActive()">{{ p.active ? 'Hide project' : 'Show project' }}</button>
+    </div>
+  </header>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>Phases (Jira) · current: {{ p.phase ?? p.currentPhase?.name ?? '—' }}</h2>
+      <table>
+        <thead><tr><th>Phase</th><th>Start</th><th>Due</th><th class="num">Left / est.</th><th>Assignee</th><th></th></tr></thead>
+        <tbody>
+          @for (d of jiraPhases(); track d.id) {
+            <tr>
+              <td><a [href]="d.url" target="_blank">{{ d.phaseName ?? d.title }}</a><span class="muted small key">{{ d.id }}</span>
+                @if (d.openSubtasks.length) {
+                  <div class="small muted">Open: @for (s of d.openSubtasks; track s.key; let last = $last) { {{ s.summary }}@if (!last) {; } }</div>
+                }
+              </td>
+              <td class="small">{{ d.startDate ? (d.startDate | date: 'dd/MM/yy') : '—' }}</td>
+              <td class="small">{{ d.dueDate ? (d.dueDate | date: 'dd/MM/yy') : '—' }}</td>
+              <td class="num small">{{ d.remainingHours ?? '?' }} / {{ d.originalHours ?? '?' }} h</td>
+              <td class="small">{{ d.assignee }}</td>
+              <td><app-flag-badges [flags]="d.flags" /></td>
+            </tr>
+          } @empty {
+            <tr><td colspan="6" class="empty">No open Jira phases.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>My view</h2>
+      <div class="form">
+        <label>Status
+          <select [value]="status()" (change)="status.set($any($event.target).value)">
+            @for (s of statuses; track s) { <option [value]="s" [selected]="s === status()">{{ s }}</option> }
+          </select>
+        </label>
+        <label>Phase override <input [value]="phase()" (input)="phase.set($any($event.target).value)" placeholder="empty = from Jira" /></label>
+        <label>SharePoint folder <input [value]="sharepointUrl()" (input)="sharepointUrl.set($any($event.target).value)" placeholder="https://…" /></label>
+        <label>PM note <textarea rows="4" [value]="pmNote()" (input)="pmNote.set($any($event.target).value)"></textarea></label>
+        <div><button class="primary" (click)="save()">Save</button> <span class="small muted">{{ saved() }}</span></div>
+      </div>
+
+      <h2 style="margin-top: 20px">Other deadlines</h2>
+      <ul class="deadline-list">
+        @for (d of manual(); track d.id) {
+          <li [class.muted]="d.state === 'done'">
+            <span>{{ d.title }}</span>
+            <span><span class="badge" [class.red]="d.flags.includes('overdue')">{{ d.dueDate | date: 'dd/MM/yy' }}</span>
+              <button (click)="toggleDeadline(d)">{{ d.state === 'open' ? 'Done' : 'Reopen' }}</button></span>
+          </li>
+        }
+      </ul>
+      <div class="inline-form">
+        <input placeholder="e.g. SAL with client" [value]="newTitle()" (input)="newTitle.set($any($event.target).value)" />
+        <input type="date" [value]="newDue()" (input)="newDue.set($any($event.target).value)" />
+        <button (click)="addDeadline()">Add</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid two" style="margin-top: 16px">
+    <div class="card">
+      <h2>Mail</h2>
+      <ul class="deadline-list">
+        @for (m of openMail(); track m.id) {
+          <li>
+            <div>
+              <span class="badge" [class.red]="m.category === 'needs_reply'" [class.amber]="m.category === 'waiting'">{{ m.category.replace('_', ' ') }}</span>
+              @if (m.webLink) { <a [href]="m.webLink" target="_blank">{{ m.subject }}</a> } @else { {{ m.subject }} }
+              <div class="small muted">{{ m.counterpart }} · {{ m.lastMessageAt | date: 'dd/MM HH:mm' }}</div>
+              @if (m.summary) { <div class="small">{{ m.summary }}</div> }
+            </div>
+            <button (click)="mailDone(m)">Done</button>
+          </li>
+        } @empty {
+          <li class="muted">No open threads for this project.</li>
+        }
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Documentation</h2>
+      <table>
+        <tbody>
+          @for (r of p.docRequirements; track r.id) {
+            <tr [class.muted]="!r.required || r.waived">
+              <td>{{ r.title }} <div class="small muted">{{ r.phase }}@if (!r.required) { · due from {{ r.requiredFrom ?? 'next phase' }} }</div></td>
+              <td>
+                @if (r.waived) { <span class="badge">not needed</span> }
+                @else {
+                  <span class="badge" [class.red]="r.required && r.checkStatus === 'missing'" [class.amber]="r.checkStatus === 'outdated'"
+                    [class.green]="r.checkStatus === 'present'">{{ r.checkStatus === 'unknown' ? 'not checked' : r.checkStatus }}</span>
+                }
+                @if (r.foundUrl) { <a class="small" [href]="r.foundUrl" target="_blank"> open</a> }
+              </td>
+              <td><button (click)="toggleWaive(r)">{{ r.waived ? 'Restore' : 'Not needed' }}</button></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+}

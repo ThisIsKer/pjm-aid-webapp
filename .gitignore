@@ -15,3 +15,6 @@ data/inbox/*
 
 .DS_Store
 Thumbs.db
+
+# Claude Code: personal approvals stay local
+.claude/settings.local.json

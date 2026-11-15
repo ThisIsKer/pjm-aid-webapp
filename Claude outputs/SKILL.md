@@ -1,6 +1,6 @@
 ---
 name: pjm-sync
-description: Sync Sebastiano's PJM aid web app — Jira DDMD epics/phases, Outlook mail to answer, and (on request or weekly) SharePoint/Confluence documentation checks — into data/inbox/snapshot.json in the pjm-aid-webapp folder. Use for "sync PJM", "sync PJM docs", "aggiorna la PJM board", or the scheduled PJM sync.
+description: Sync Sebastiano's PJM aid web app — Jira DDMD epics/phases, Outlook mail to answer, and (on request or weekly) SharePoint/Confluence documentation checks — into data/inbox/snapshot.json in the pjm-aid-webapp folder. Use for "sync PJM", "sync PJM docs", "aggiorna la PJM board", the app's "Sync now" button, or the scheduled PJM sync.
 ---
 
 # PJM sync (Jira + Outlook + SharePoint/Confluence → PJM aid)
@@ -15,7 +15,7 @@ the analysis document?), and drops one snapshot file into the app's inbox. The b
 
 | Request | Jira | Mail | Docs |
 |---|---|---|---|
-| "sync PJM" / daily scheduled run | ✓ | ✓ | – |
+| "sync PJM" / "Jira and mail" / daily scheduled run | ✓ | ✓ | – |
 | "sync PJM docs" / "full sync" / Monday scheduled run | ✓ | ✓ | ✓ |
 | "sync PJM jira only" | ✓ | – | – |
 
@@ -25,19 +25,34 @@ The Jira rules are the same as the `controllo-pm` skill (DDMD project, archivagr
 `customfield_11738` = start date, overdue / at-risk / missing-data flags). Flags, RAG and which documents are
 due are computed by the app from the raw fields — this skill collects data and makes the mail/doc judgement calls.
 
-## 0. Preconditions
+## 0. Where you are running
 
+**A. Local — Claude Code in the repo folder** (the app's "Sync now" button runs `claude -p` there; also an
+interactive `claude` session opened in the folder). You are here when `tools/build-snapshot.ts` exists in the
+working directory.
+- Files are local: read `data/registry.json` directly; no staging, no committing.
+- Working files go in `data/work/<timestamp>/` (git-ignored); write only there and to the inbox (via the builder).
+- When a connector result is too large and Claude Code saves it to a file, pass that file path straight to the
+  builder — don't read or copy it.
+- Builder: `node tools/build-snapshot.ts … --out data/inbox/snapshot.json` (it writes atomically).
+- Headless runs (`-p`): nobody can answer questions or permission prompts — never ask; if a tool is denied, say
+  which one in the final report. Your final message is shown in the app as the sync result.
+- Allowed tools are pre-approved in `.claude/settings.json` (read-only connector tools, the builder, writes under
+  `data/work/`). Don't try other tools.
+
+**B. Cowork — cloud workspace with the computer linked.**
 - The computer must be linked and the `pjm-aid-webapp` folder connected (normally
   `C:\Users\SebastianoFilippetto\Documents\pjm-aid-webapp`; confirm with the session's connected folders /
   `get_device_info`). If it is not reachable, say so and stop — don't produce a snapshot elsewhere.
 - Stage from the folder (always re-stage, the repo may have changed): `tools/build-snapshot.ts`,
   `tools/package.json`, `backend/src/flags.ts`, `backend/package.json`, and `data/registry.json`.
   They land under `/mnt/user-data/uploads/pjm-aid-webapp/…`; the builder runs with the container's `node`
-  (≥ 22.18, no install).
-- `data/registry.json` is written by the app: projects (id = epic key, name, client, current phase, SharePoint
-  folder, documentation checklist with `required` flags), open mail threads, and `lastSync.generatedAt`.
-  If it is missing (app never started), do Jira only and say so.
-- Work in a fresh scratch dir, e.g. `/home/claude/pjm-sync-<timestamp>/`.
+  (≥ 22.18, no install). Work in a fresh scratch dir, e.g. `/home/claude/pjm-sync-<timestamp>/`.
+- When a result is too large the harness saves it and gives a path → `cp` it into the scratch dir.
+
+In both: `data/registry.json` is written by the app — projects (id = epic key, name, client, current phase,
+SharePoint folder, documentation checklist with `required` flags), open mail threads, and
+`lastSync.generatedAt`. If it is missing (app never started), do Jira only and say so.
 
 ## 1. Jira (cloudId `archivagroup.atlassian.net`) — same scope as `controllo-pm`
 
@@ -53,11 +68,10 @@ Get "me" with `atlassianUserInfo` (`account_id`). Ask only for the listed fields
 
 If Q1 returns nothing, Q2 is skipped (no epics is a valid, clean result).
 
-Candidates for Q4: `node …/tools/build-snapshot.ts --candidates --phases phases*.json --foreign foreign*.json`
+Candidates for Q4: `node <builder> --candidates --phases <phases files> --foreign <foreign files>`
 (prints keys of open phases overdue or due within 14 days; empty → skip Q4).
 
-**Getting results into files without retyping:** when a result is too large the harness saves it and gives a
-path → `cp` it. When it comes back inline, write an array of compact rows
+**Results that come back inline** (not saved to a file): write them as an array of compact rows
 `{"key","summary","status","cat","due","start","origH","remH","parent","parentSummary","assignee","assigneeId"}`
 (`cat` = status category key new/indeterminate/done; `due`/`start` = duedate/customfield_11738; `origH`/`remH`
 = estimate seconds ÷ 3600; copy values exactly).
@@ -120,31 +134,31 @@ For each **active** registry project with docs where `required && !waived && che
 
 ## 4. Build and deliver
 
-```bash
-OUT=/mnt/user-data/outputs/pjm-sync/snapshot-$(date -u +%Y%m%dT%H%M%S).json   # unique name every run
-node /mnt/user-data/uploads/pjm-aid-webapp/tools/build-snapshot.ts \
-  --me <account_id> --site https://archivagroup.atlassian.net \
-  --epics epics*.json --phases phases*.json [--foreign foreign*.json] [--subtasks subtasks*.json] \
-  [--mail mail.json] [--docs docs.json] [--folders folders.json] --out "$OUT"
-```
+Arguments (omit the optional ones you have no file for):
+`--me <account_id> --site https://archivagroup.atlassian.net --epics … --phases … [--foreign …] [--subtasks …]
+[--mail mail.json] [--docs docs.json] [--folders folders.json] --out <out>`
+
+- **Local:** `node tools/build-snapshot.ts <arguments> --out data/inbox/snapshot.json` — done; the app imports it.
+- **Cowork:** `OUT=/mnt/user-data/outputs/pjm-sync/snapshot-$(date -u +%Y%m%dT%H%M%S).json` (a new name every
+  run: committing the same staged path twice can deliver the previous content), run
+  `node /mnt/user-data/uploads/pjm-aid-webapp/tools/build-snapshot.ts <arguments> --out "$OUT"`, then
+  `device_commit_files` stagedPath `$OUT` → devicePath `<pjm-aid-webapp folder>\data\inbox\snapshot.json`, and
+  verify with `device_bash` (head of the file) that the new snapshot landed.
 
 The builder validates categories/statuses and fails loudly — fix the input, don't skip the check.
-Then `device_commit_files`: stagedPath `$OUT` → devicePath `<pjm-aid-webapp folder>\data\inbox\snapshot.json`.
-**Always use a new file name for `$OUT`**: committing the same staged path twice can deliver the previous content.
-Verify with `device_bash` (`grep -c '"generatedAt"'` / head of the file) that the new snapshot landed.
 
 ## 5. Report
 
-Brief, in the language of the request (Italian for scheduled runs), neutral tone like `controllo-pm`: relay the
-builder's stdout (overdue / at-risk phases with open sub-tasks, mails needing a reply with urgency, doc gaps
-found), with natural names and links (`https://archivagroup.atlassian.net/browse/<KEY>`). One line at the end:
-the app imports the snapshot automatically if running, otherwise at next start (or **Import snapshot**).
-Don't attach the snapshot file to the chat unless asked. Unattended runs: no questions — collect, build,
-deliver, report.
+Brief, in the language of the request (Italian for scheduled runs and for the app's "Sync now"), neutral tone like
+`controllo-pm`: relay the builder's stdout (overdue / at-risk phases with open sub-tasks, mails needing a reply with
+urgency, doc gaps found), with natural names and links (`https://archivagroup.atlassian.net/browse/<KEY>`). In
+Cowork add one line: the app imports the snapshot automatically if running, otherwise at next start (or **Import
+snapshot**). Don't attach the snapshot file to the chat unless asked. Unattended or headless runs: no questions —
+collect, build, deliver, report.
 
 ## Notes
 
 - Never edit the app's database, `data/seed.json` or `data/registry.json` from this skill.
 - Projects are created by the app from epics; Sebastiano groups/hides them in the Projects page.
 - Snapshot format and field ownership: `docs/ARCHITECTURE.md` in the repo; skill source:
-  `claude/skills/pjm-sync/SKILL.md`.
+  `.claude/skills/pjm-sync/SKILL.md`.

@@ -3,6 +3,7 @@ import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { config } from './config.ts';
 import { openDb } from './db.ts';
+import { markInterruptedJobs } from './agent.ts';
 import { exportRegistry } from './registry.ts';
 import { seedIfEmpty, syncDocTemplate } from './seed.ts';
 import { importSnapshotIfPresent } from './snapshot.ts';
@@ -11,6 +12,7 @@ import { apiRouter } from './routes.ts';
 const db = openDb(config.dbFile);
 seedIfEmpty(db, config.seedFile);
 syncDocTemplate(db, config.seedFile);
+markInterruptedJobs(db);
 
 function tryImport() {
   try {

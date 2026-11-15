@@ -34,5 +34,16 @@ To try the UI with demo data, use `data/seed.example.json` as `data/seed.json` a
 
 ## Claude integration
 
-- `claude/skills/pjm-sync/SKILL.md` — the sync skill (source of truth; saved to Claude as a personal skill).
-- `tools/build-snapshot.ts` — turns raw Jira results into the snapshot; run by Claude, not by you.
+- **Sync now** (dashboard): runs the `pjm-sync` skill through Claude Code in this folder (needs Claude Code installed
+  and signed in with your claude.ai account). Choose *Jira + mail*, *Jira + mail + docs* or *Jira only*; progress and
+  Claude's summary appear under the button. Allowed tools: `.claude/settings.json`.
+- **From any Claude chat**: "sync PJM" / "sync PJM docs" in Cowork, or `claude` in this folder.
+- **MCP server** — lets Claude read and update the board ("what's late on IMA?", "mark the Dorigo mail as done").
+  The backend must be running.
+  - Claude Code: `claude mcp add pjm-aid --scope user -- node C:\Users\SebastianoFilippetto\Documents\pjm-aid-webapp\backend\src\mcp.ts`
+  - Claude desktop app (also used by Cowork sessions linked to this PC): Settings → Developer → Edit config, add
+    ```json
+    "mcpServers": { "pjm-aid": { "command": "node", "args": ["C:\\Users\\SebastianoFilippetto\\Documents\\pjm-aid-webapp\\backend\\src\\mcp.ts"] } }
+    ```
+    and restart the app.
+- Sources: `.claude/skills/pjm-sync/SKILL.md` (skill), `tools/build-snapshot.ts` (snapshot builder), `backend/src/agent.ts` (Sync now), `backend/src/mcp.ts` (MCP).

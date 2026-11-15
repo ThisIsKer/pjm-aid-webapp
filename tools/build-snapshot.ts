@@ -162,7 +162,9 @@ const snapshot: SnapshotV2 = {
   ...(a['folders'] ? { projectFolders } : {}),
 };
 fs.mkdirSync(path.dirname(a['out'][0]), { recursive: true });
-fs.writeFileSync(a['out'][0], JSON.stringify(snapshot, null, 2));
+// Write atomically: the app watches the inbox and must never read a half-written file.
+fs.writeFileSync(`${a['out'][0]}.tmp`, JSON.stringify(snapshot, null, 2));
+fs.renameSync(`${a['out'][0]}.tmp`, a['out'][0]);
 
 // Human summary for the chat (controllo-pm style).
 const flagged = phases.map((p) => ({

@@ -122,3 +122,29 @@ export interface Dashboard {
   deadlines: Deadline[];
   lastSync: SyncRun | null;
 }
+
+export interface ProjectDetail extends Project {
+  pmNote: string | null;
+  epics: JiraEpic[];
+  deadlines: Deadline[];
+  mailThreads: MailThread[];
+  docRequirements: DocRequirement[];
+}
+
+export interface SyncStep { at: string; label: string; count: number }
+
+export interface SyncJob {
+  id: number;
+  mode: 'daily' | 'docs' | 'jira';
+  status: 'running' | 'ok' | 'error';
+  startedAt: string;
+  finishedAt?: string | null;
+  steps: SyncStep[];
+  resultText?: string | null;
+  denials: string[];
+  error?: string | null;
+  costUsd?: number | null;
+  imported?: boolean;
+}
+
+export interface AgentStatus { available: boolean; version: string | null; bin: string; running: boolean }

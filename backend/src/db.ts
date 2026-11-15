@@ -151,6 +151,21 @@ const MIGRATIONS: string[] = [
   ALTER TABLE doc_requirements ADD COLUMN from_template INTEGER NOT NULL DEFAULT 0;
   UPDATE doc_requirements SET from_template = 1;
   `,
+  /* v4 — "Sync now" jobs run through Claude Code */ `
+  CREATE TABLE sync_jobs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    mode         TEXT NOT NULL,
+    status       TEXT NOT NULL CHECK (status IN ('running','ok','error')),
+    started_at   TEXT NOT NULL,
+    finished_at  TEXT,
+    steps        TEXT NOT NULL DEFAULT '[]',
+    result_text  TEXT,
+    denials      TEXT NOT NULL DEFAULT '[]',
+    error        TEXT,
+    cost_usd     REAL,
+    imported     INTEGER NOT NULL DEFAULT 0
+  );
+  `,
 ];
 
 export function openDb(file: string): DatabaseSync {
