@@ -1,18 +1,22 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "generatedAt": "2026-11-15T07:30:00+01:00",
   "complete": true,
-  "projects": [
-    { "id": "acme-einvoicing", "suggestedStatus": "amber", "suggestedReason": "Design phase due in 3 days with 24h remaining estimate." }
-  ],
-  "deadlines": [
-    { "id": "DDMD-101", "projectId": "acme-einvoicing", "title": "Design – specifica tecnica", "dueDate": "2026-11-18", "source": "jira", "sourceRef": "DDMD-101", "assignee": "Sebastiano", "remainingHours": 24 },
-    { "id": "DDMD-201", "projectId": "globex-dms", "title": "UAT ciclo 2", "dueDate": "2026-11-10", "source": "jira", "sourceRef": "DDMD-201", "remainingHours": 6 }
-  ],
+  "jira": {
+    "epics": [
+      { "key": "DDMD-100", "summary": "ACME - FEI Slovacchia", "status": "In Corso", "statusCategory": "indeterminate", "startDate": "2026-09-01", "dueDate": "2027-01-29", "assignee": "Sebastiano Filippetto", "mine": true, "url": "https://archivagroup.atlassian.net/browse/DDMD-100" },
+      { "key": "DDMD-200", "summary": "Globex - S4", "status": "In Corso", "statusCategory": "indeterminate", "mine": false, "url": "https://archivagroup.atlassian.net/browse/DDMD-200" }
+    ],
+    "phases": [
+      { "key": "DDMD-110", "epicKey": "DDMD-100", "summary": "ACME - FEI Slovacchia - UAT", "phaseName": "UAT", "status": "In Corso", "statusCategory": "indeterminate", "startDate": "2026-11-09", "dueDate": "2026-11-20", "assignee": "Sebastiano Filippetto", "assignedToMe": true, "originalHours": 24, "remainingHours": 20, "url": "https://archivagroup.atlassian.net/browse/DDMD-110", "openSubtasks": [{ "key": "DDMD-111", "summary": "Verbale UAT", "assignee": "Sebastiano Filippetto" }] },
+      { "key": "DDMD-112", "epicKey": "DDMD-100", "summary": "ACME - FEI Slovacchia - Live", "phaseName": "Live", "status": "Da Completare", "statusCategory": "new", "startDate": "2026-12-07", "dueDate": "2026-12-11", "assignee": "Sebastiano Filippetto", "assignedToMe": true, "originalHours": 8, "remainingHours": 8, "url": "https://archivagroup.atlassian.net/browse/DDMD-112" },
+      { "key": "DDMD-210", "epicKey": "DDMD-200", "summary": "Globex - S4 - Test interni", "phaseName": "Test interni", "status": "In Corso", "statusCategory": "indeterminate", "startDate": "2026-10-20", "dueDate": "2026-11-10", "assignee": "Sebastiano Filippetto", "assignedToMe": true, "originalHours": 16, "remainingHours": 6, "url": "https://archivagroup.atlassian.net/browse/DDMD-210" }
+    ]
+  },
   "mailThreads": [
     {
       "id": "AAQkAGI2-example-conversation-id",
-      "projectId": "acme-einvoicing",
+      "projectId": "DDMD-100",
       "subject": "RE: Mapping codici IVA",
       "counterpart": "mario.rossi@acme.example",
       "lastMessageAt": "2026-11-13T16:42:00+01:00",
@@ -24,8 +28,7 @@
     }
   ],
   "docChecks": [
-    { "requirementId": "acme-einvoicing--analisi-funzionale", "status": "present", "foundUrl": "https://example.sharepoint.com/sites/acme-einvoicing/AF.docx" },
-    { "requirementId": "acme-einvoicing--specifica-tecnica", "status": "missing" },
-    { "requirementId": "globex-dms--report-di-migrazione", "status": "outdated" }
+    { "requirementId": "DDMD-100--analisi-funzionale", "status": "present", "foundUrl": "https://example.sharepoint.com/sites/acme/AF.docx" },
+    { "requirementId": "DDMD-100--specifica-tecnica", "status": "missing" }
   ]
 }

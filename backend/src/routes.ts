@@ -1,46 +1,31 @@
 import { Router, type Request, type Response } from 'express';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { config } from './config.ts';
+import { addDays, isoToday } from './flags.ts';
+import { ACTIVE_MAIL, getProjectRow, loadDeadlines, loadProjects } from './projects.ts';
+import { applyDocTemplate } from './seed.ts';
 import { importSnapshotIfPresent } from './snapshot.ts';
 import { slug, toApi, toApiList } from './util.ts';
 
-/** Today's date (YYYY-MM-DD) in the machine's local timezone. */
-const today = () => new Date().toLocaleDateString('sv-SE');
-const addDays = (iso: string, n: number) => {
-  const d = new Date(`${iso}T12:00:00`);
-  d.setDate(d.getDate() + n);
-  return d.toLocaleDateString('sv-SE');
-};
+type FieldDef = { col: string; json?: boolean; bool?: boolean };
 
-const ACTIVE_MAIL = `(m.user_state = 'open' OR (m.user_state = 'snoozed' AND COALESCE(m.snoozed_until, '') <= :today))`;
-const OPEN_DOC_GAP = `(r.check_status IN ('missing','outdated') AND r.waived = 0)`;
-
-const PROJECT_SUMMARY = `
-  SELECT p.*,
-    (SELECT COUNT(*) FROM deadlines d WHERE d.project_id = p.id AND d.state = 'open' AND d.due_date < :today) AS overdue,
-    (SELECT MIN(d.due_date) FROM deadlines d WHERE d.project_id = p.id AND d.state = 'open' AND d.due_date >= :today) AS next_deadline,
-    (SELECT COUNT(*) FROM mail_threads m WHERE m.project_id = p.id AND m.category = 'needs_reply' AND ${ACTIVE_MAIL}) AS needs_reply,
-    (SELECT COUNT(*) FROM doc_requirements r WHERE r.project_id = p.id AND ${OPEN_DOC_GAP}) AS missing_docs
-  FROM projects p`;
-
-/** Columns the UI / Claude may edit on a project (camelCase API name → DB column). */
-const PROJECT_FIELDS: Record<string, { col: string; json?: boolean; bool?: boolean }> = {
+/** Fields the UI / Claude may edit on a project (camelCase API name → DB column). */
+const PROJECT_FIELDS: Record<string, FieldDef> = {
   name: { col: 'name' },
   client: { col: 'client' },
   description: { col: 'description' },
   phase: { col: 'phase' },
   status: { col: 'status' },
   pmNote: { col: 'pm_note' },
-  jiraKeys: { col: 'jira_keys', json: true },
   sharepointUrl: { col: 'sharepoint_url' },
+  sharepointFolderUri: { col: 'sharepoint_folder_uri' },
   confluenceSpace: { col: 'confluence_space' },
   mailKeywords: { col: 'mail_keywords', json: true },
   mailDomains: { col: 'mail_domains', json: true },
   active: { col: 'active', bool: true },
 };
 
-function patch(db: DatabaseSync, table: string, id: string, body: Record<string, unknown>,
-  fields: Record<string, { col: string; json?: boolean; bool?: boolean }>): number {
+function patch(db: DatabaseSync, table: string, id: string, body: Record<string, unknown>, fields: Record<string, FieldDef>): number {
   const sets: string[] = [];
   const values: SQLInputValue[] = [];
   for (const [key, def] of Object.entries(fields)) {
@@ -56,59 +41,55 @@ function patch(db: DatabaseSync, table: string, id: string, body: Record<string,
 
 const notFound = (res: Response) => res.status(404).json({ error: 'not found' });
 const param = (req: Request, name: string) => String(req.params[name]);
+const lastSync = (db: DatabaseSync) => {
+  const last = db.prepare('SELECT * FROM sync_runs ORDER BY id DESC LIMIT 1').get();
+  return last ? toApi(last) : null;
+};
 
 export function apiRouter(db: DatabaseSync): Router {
   const r = Router();
 
-  r.get('/health', (_req, res) => {
-    const last = db.prepare('SELECT * FROM sync_runs ORDER BY id DESC LIMIT 1').get();
-    res.json({ ok: true, today: today(), lastSync: last ? toApi(last) : null });
-  });
+  r.get('/health', (_req, res) => res.json({ ok: true, today: isoToday(), lastSync: lastSync(db) }));
 
   // ---------- Dashboard ----------
   r.get('/dashboard', (req, res) => {
-    const t = today();
-    const horizon = addDays(t, Number(req.query['days'] ?? 14));
-    const projects = toApiList(db.prepare(`${PROJECT_SUMMARY} WHERE p.active = 1
-      ORDER BY CASE p.status WHEN 'red' THEN 0 WHEN 'amber' THEN 1 WHEN 'green' THEN 2 ELSE 3 END, p.name`).all({ today: t }));
-    const deadlines = toApiList(db.prepare(`
-      SELECT d.*, p.name AS project_name FROM deadlines d JOIN projects p ON p.id = d.project_id
-      WHERE d.state = 'open' AND p.active = 1 AND d.due_date IS NOT NULL AND d.due_date <= :horizon
-      ORDER BY d.due_date`).all({ horizon }));
+    const today = isoToday();
+    const horizon = addDays(today, Number(req.query['days'] ?? 14));
+    const projects = loadProjects(db);
+    const deadlines = loadDeadlines(db,
+      `d.state = 'open' AND p.active = 1 AND d.due_date IS NOT NULL AND d.due_date <= :horizon`, { horizon });
     const count = (sql: string, params: Record<string, SQLInputValue> = {}) => (db.prepare(sql).get(params) as { n: number }).n;
-    const last = db.prepare('SELECT * FROM sync_runs ORDER BY id DESC LIMIT 1').get();
     res.json({
-      today: t,
+      today,
       horizon,
       kpis: {
         activeProjects: projects.length,
-        overdue: deadlines.filter((d) => String(d['dueDate']) < t).length,
-        dueSoon: deadlines.filter((d) => String(d['dueDate']) >= t).length,
-        needsReply: count(`SELECT COUNT(*) AS n FROM mail_threads m WHERE m.category = 'needs_reply' AND ${ACTIVE_MAIL}`, { today: t }),
-        missingDocs: count(`SELECT COUNT(*) AS n FROM doc_requirements r JOIN projects p ON p.id = r.project_id
-          WHERE p.active = 1 AND ${OPEN_DOC_GAP}`),
+        overdue: deadlines.filter((d) => d.flags.includes('overdue')).length,
+        atRisk: deadlines.filter((d) => d.flags.includes('at_risk')).length,
+        dueSoon: deadlines.filter((d) => !d.flags.includes('overdue')).length,
+        needsReply: count(`SELECT COUNT(*) AS n FROM mail_threads m WHERE m.category = 'needs_reply' AND ${ACTIVE_MAIL}`, { today }),
+        missingDocs: projects.reduce((n, p) => n + p.missingDocs, 0),
+        uncheckedDocs: projects.reduce((n, p) => n + p.uncheckedDocs, 0),
       },
-      projects,
+      projects: projects.map(({ docs: _docs, ...p }) => p),
       deadlines,
-      lastSync: last ? toApi(last) : null,
+      lastSync: lastSync(db),
     });
   });
 
   // ---------- Projects ----------
-  r.get('/projects', (req, res) => {
-    const where = req.query['all'] === 'true' ? '' : 'WHERE p.active = 1';
-    res.json(toApiList(db.prepare(`${PROJECT_SUMMARY} ${where} ORDER BY p.name`).all({ today: today() })));
-  });
+  r.get('/projects', (req, res) => res.json(loadProjects(db, { all: req.query['all'] === 'true' })));
 
   r.get('/projects/:id', (req, res) => {
     const id = param(req, 'id');
-    const project = db.prepare(`${PROJECT_SUMMARY} WHERE p.id = :id`).get({ id, today: today() });
+    const [project] = loadProjects(db, { id });
     if (!project) return notFound(res);
     res.json({
-      ...toApi(project),
-      deadlines: toApiList(db.prepare('SELECT * FROM deadlines WHERE project_id = ? ORDER BY state, due_date').all(id)),
+      ...project,
+      epics: toApiList(db.prepare('SELECT * FROM jira_epics WHERE project_id = ? ORDER BY key').all(id)),
+      deadlines: loadDeadlines(db, 'd.eff_project_id = :id', { id }),
       mailThreads: toApiList(db.prepare('SELECT * FROM mail_threads WHERE project_id = ? ORDER BY last_message_at DESC').all(id)),
-      docRequirements: toApiList(db.prepare('SELECT * FROM doc_requirements WHERE project_id = ? ORDER BY phase, title').all(id)),
+      docRequirements: project.docs,
     });
   });
 
@@ -118,16 +99,38 @@ export function apiRouter(db: DatabaseSync): Router {
     const id = typeof body['id'] === 'string' && body['id'] ? slug(body['id']) : slug(body['name']);
     db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run(id, body['name']);
     patch(db, 'projects', id, body, PROJECT_FIELDS);
-    res.status(201).json(toApi(db.prepare('SELECT * FROM projects WHERE id = ?').get(id)));
+    applyDocTemplate(db, id);
+    res.status(201).json(getProjectRow(db, id));
   });
 
   r.patch('/projects/:id', (req, res) => {
     const id = param(req, 'id');
     if (!patch(db, 'projects', id, req.body as Record<string, unknown>, PROJECT_FIELDS)) return notFound(res);
-    res.json(toApi(db.prepare('SELECT * FROM projects WHERE id = ?').get(id)));
+    res.json(getProjectRow(db, id));
   });
 
-  // ---------- Deadlines (manual ones; Jira ones arrive via snapshot) ----------
+  // ---------- Jira epics (link an epic to another project to group several epics) ----------
+  r.get('/jira/epics', (_req, res) => {
+    res.json(toApiList(db.prepare(`SELECT e.*, p.name AS project_name FROM jira_epics e
+      LEFT JOIN projects p ON p.id = e.project_id WHERE e.active = 1 ORDER BY e.key`).all()));
+  });
+
+  r.patch('/jira/epics/:key', (req, res) => {
+    const key = param(req, 'key');
+    const projectId = (req.body as { projectId?: string }).projectId;
+    if (!projectId || !getProjectRow(db, projectId)) return res.status(400).json({ error: 'valid projectId required' });
+    const prev = db.prepare('SELECT project_id FROM jira_epics WHERE key = ?').get(key) as { project_id: string | null } | undefined;
+    if (!prev) return notFound(res);
+    db.prepare(`UPDATE jira_epics SET project_id = ?, updated_at = datetime('now') WHERE key = ?`).run(projectId, key);
+    // A Jira-created project left without epics is hidden.
+    if (prev.project_id && prev.project_id !== projectId) {
+      db.prepare(`UPDATE projects SET active = 0 WHERE id = ? AND origin = 'jira'
+        AND NOT EXISTS (SELECT 1 FROM jira_epics WHERE project_id = ?)`).run(prev.project_id, prev.project_id);
+    }
+    res.json(toApi(db.prepare('SELECT * FROM jira_epics WHERE key = ?').get(key)));
+  });
+
+  // ---------- Deadlines (manual ones; Jira phases arrive via snapshot) ----------
   r.post('/projects/:id/deadlines', (req, res) => {
     const projectId = param(req, 'id');
     const b = req.body as { title?: string; dueDate?: string };
@@ -139,22 +142,26 @@ export function apiRouter(db: DatabaseSync): Router {
   });
 
   r.patch('/deadlines/:id', (req, res) => {
-    const changes = patch(db, 'deadlines', param(req, 'id'), req.body as Record<string, unknown>, {
+    const id = param(req, 'id');
+    const row = db.prepare('SELECT source FROM deadlines WHERE id = ?').get(id) as { source: string } | undefined;
+    if (!row) return notFound(res);
+    if (row.source === 'jira') return res.status(409).json({ error: 'Jira phases are edited in Jira' });
+    patch(db, 'deadlines', id, req.body as Record<string, unknown>, {
       title: { col: 'title' }, dueDate: { col: 'due_date' }, state: { col: 'state' },
     });
-    if (!changes) return notFound(res);
-    res.json(toApi(db.prepare('SELECT * FROM deadlines WHERE id = ?').get(param(req, 'id'))));
+    res.json(toApi(db.prepare('SELECT * FROM deadlines WHERE id = ?').get(id)));
   });
 
   // ---------- Mail triage ----------
   r.get('/mail', (req, res) => {
     const category = req.query['category'];
     const showAll = req.query['state'] === 'all';
+    const params: Record<string, SQLInputValue> = showAll ? {} : { today: isoToday() };
+    if (category) params['category'] = String(category);
     const rows = db.prepare(`
       SELECT m.*, p.name AS project_name FROM mail_threads m LEFT JOIN projects p ON p.id = m.project_id
       WHERE ${showAll ? '1 = 1' : ACTIVE_MAIL} ${category ? 'AND m.category = :category' : ''}
-      ORDER BY CASE m.urgency WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, m.last_message_at`)
-      .all(category ? { today: today(), category: String(category) } : { today: today() });
+      ORDER BY CASE m.urgency WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, m.last_message_at`).all(params);
     res.json(toApiList(rows));
   });
 
@@ -167,13 +174,14 @@ export function apiRouter(db: DatabaseSync): Router {
   });
 
   // ---------- Documentation checklist ----------
+  /** Documentation checklist of active projects; `required` = due given the project's current phase. */
   r.get('/docs', (req, res) => {
-    const onlyGaps = req.query['gaps'] !== 'false';
-    const rows = db.prepare(`
-      SELECT r.*, p.name AS project_name FROM doc_requirements r JOIN projects p ON p.id = r.project_id
-      WHERE p.active = 1 ${onlyGaps ? `AND (${OPEN_DOC_GAP} OR r.check_status = 'unknown')` : ''}
-      ORDER BY p.name, r.phase, r.title`).all();
-    res.json(toApiList(rows));
+    const all = req.query['all'] === 'true';
+    const rows = loadProjects(db).flatMap((p) => p.docs.map((d) => ({
+      ...d, projectName: p['name'], projectPhase: p.currentPhase?.name ?? p['phase'] ?? null,
+      projectFolderUrl: p['sharepointUrl'] ?? null,
+    })));
+    res.json(all ? rows : rows.filter((d) => d.required && !d.waived && d.checkStatus !== 'present'));
   });
 
   r.post('/projects/:id/docs', (req, res) => {
@@ -182,13 +190,13 @@ export function apiRouter(db: DatabaseSync): Router {
     if (!b.title || !b.repository) return res.status(400).json({ error: 'title and repository are required' });
     const id = `${projectId}--${slug(b.title)}`;
     db.prepare('INSERT INTO doc_requirements (id, project_id, phase, title, repository, location_hint) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, projectId, b.phase ?? null, b.title, b.repository, b.locationHint ?? null);
+      .run(id, projectId, b.phase ?? null, b.title, b.repository, b.locationHint ?? null); // manual: from_template = 0
     res.status(201).json(toApi(db.prepare('SELECT * FROM doc_requirements WHERE id = ?').get(id)));
   });
 
   r.patch('/docs/:id', (req, res) => {
     const changes = patch(db, 'doc_requirements', param(req, 'id'), req.body as Record<string, unknown>, {
-      waived: { col: 'waived', bool: true }, locationHint: { col: 'location_hint' }, phase: { col: 'phase' },
+      waived: { col: 'waived', bool: true }, locationHint: { col: 'location_hint' },
     });
     if (!changes) return notFound(res);
     res.json(toApi(db.prepare('SELECT * FROM doc_requirements WHERE id = ?').get(param(req, 'id'))));

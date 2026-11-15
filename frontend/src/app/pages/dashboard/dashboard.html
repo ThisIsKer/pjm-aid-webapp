@@ -18,61 +18,84 @@
 @if (data.value(); as d) {
   <section class="kpis">
     <a class="kpi" routerLink="/projects"><div class="value">{{ d.kpis.activeProjects }}</div><div class="label">Active projects</div></a>
-    <div class="kpi" [class.alert]="d.kpis.overdue > 0"><div class="value">{{ d.kpis.overdue }}</div><div class="label">Overdue deadlines</div></div>
-    <div class="kpi"><div class="value">{{ d.kpis.dueSoon }}</div><div class="label">Due by {{ d.horizon | date: 'dd/MM' }}</div></div>
+    <div class="kpi" [class.alert]="d.kpis.overdue > 0"><div class="value">{{ d.kpis.overdue }}</div><div class="label">Overdue phases</div></div>
+    <div class="kpi" [class.warn]="d.kpis.atRisk > 0"><div class="value">{{ d.kpis.atRisk }}</div><div class="label">At risk (≤ 14 days, high remaining)</div></div>
     <a class="kpi" routerLink="/mail" [class.alert]="d.kpis.needsReply > 0"><div class="value">{{ d.kpis.needsReply }}</div><div class="label">Mails to answer</div></a>
-    <a class="kpi" routerLink="/docs" [class.alert]="d.kpis.missingDocs > 0"><div class="value">{{ d.kpis.missingDocs }}</div><div class="label">Missing / outdated docs</div></a>
+    <a class="kpi" routerLink="/docs" [class.alert]="d.kpis.missingDocs > 0"><div class="value">{{ d.kpis.missingDocs }}</div><div class="label">Missing / outdated docs@if (d.kpis.uncheckedDocs) { · {{ d.kpis.uncheckedDocs }} not checked }</div></a>
   </section>
 
   <section class="grid two">
     <div class="card">
       <h2>Projects</h2>
-      @if (d.projects.length) {
+      @if (projects().length) {
         <table>
           <thead>
-            <tr><th></th><th>Project</th><th>Phase</th><th>Next deadline</th><th class="num">Overdue</th><th class="num">Mails</th><th class="num">Doc gaps</th></tr>
+            <tr><th></th><th>Project</th><th>Phase</th><th>Jira</th><th>Next due</th><th class="num">Data gaps</th><th class="num">Mails</th><th class="num">Docs</th></tr>
           </thead>
           <tbody>
-            @for (p of d.projects; track p.id) {
+            @for (p of projects(); track p.id) {
               <tr>
                 <td><app-rag-dot [status]="p.status" /></td>
                 <td>
                   <strong>{{ p.name }}</strong>
-                  <div class="muted small">{{ p.client }}</div>
+                  @if (p.role === 'contributor') { <span class="badge">contributor</span> }
+                  <div class="muted small">{{ p.jiraKeys.join(', ') }}</div>
                   @if (p.suggestedStatus && p.suggestedStatus !== p.status) {
                     <div class="small"><span class="badge {{ p.suggestedStatus }}">Claude suggests {{ p.suggestedStatus }}</span> {{ p.suggestedReason }}</div>
                   }
                 </td>
-                <td>{{ p.phase ?? '—' }}</td>
-                <td>{{ p.nextDeadline ? (p.nextDeadline | date: 'dd/MM/yyyy') : '—' }}</td>
-                <td class="num">@if (p.overdue) { <span class="badge red">{{ p.overdue }}</span> } @else { 0 }</td>
-                <td class="num">{{ p.needsReply }}</td>
-                <td class="num">{{ p.missingDocs }}</td>
+                <td>
+                  @if (p.phase) { {{ p.phase }} }
+                  @else if (p.currentPhase; as cp) {
+                    {{ cp.name }} @if (cp.startsOn) { <div class="muted small">from {{ cp.startsOn | date: 'dd/MM' }}</div> }
+                  } @else { <span class="muted">—</span> }
+                </td>
+                <td><span class="badge {{ p.jiraRag }}" [title]="p.jiraRagReason">{{ p.jiraRag === 'grey' ? 'n/a' : p.jiraRag }}</span>
+                  @if (p.overdue || p.atRisk) { <div class="muted small">{{ p.jiraRagReason }}</div> }</td>
+                <td>{{ p.nextDeadline ? (p.nextDeadline | date: 'dd/MM/yy') : '—' }}</td>
+                <td class="num">{{ p.dataGaps || '' }}</td>
+                <td class="num">{{ p.needsReply || '' }}</td>
+                <td class="num">{{ p.missingDocs || '' }}</td>
               </tr>
             }
           </tbody>
         </table>
       } @else {
-        <div class="empty">No projects yet. Add them to <code>data/seed.json</code> and restart the backend.</div>
+        <div class="empty">No projects yet. They are created from your Jira epics at the first Claude sync.</div>
       }
     </div>
 
     <div class="card">
-      <h2>Deadlines (overdue and next {{ d.horizon | date: 'dd/MM' }})</h2>
-      @if (d.deadlines.length) {
+      <div class="card-head">
+        <h2>Due by {{ d.horizon | date: 'dd/MM' }} (and overdue)</h2>
+        <label class="small muted"><input type="checkbox" [checked]="onlyMine()" (change)="onlyMine.set(!onlyMine())" /> only mine</label>
+      </div>
+      @if (deadlines().length) {
         <ul class="deadline-list">
-          @for (dl of d.deadlines; track dl.id) {
+          @for (dl of deadlines(); track dl.id) {
             <li>
               <div>
-                <div>{{ dl.title }}</div>
-                <div class="muted small">{{ dl.projectName }} @if (dl.sourceRef) { · {{ dl.sourceRef }} } @if (dl.remainingHours) { · {{ dl.remainingHours }}h left }</div>
+                <div>
+                  @if (dl.url) { <a [href]="dl.url" target="_blank">{{ dl.epicSummary ?? dl.projectName }} – {{ dl.phaseName ?? dl.title }}</a> }
+                  @else { {{ dl.projectName }} – {{ dl.title }} }
+                </div>
+                <div class="muted small">
+                  @if (dl.remainingHours != null) { {{ dl.remainingHours }}h left @if (dl.originalHours) { of {{ dl.originalHours }}h } }
+                  @if (!dl.assignedToMe && dl.assignee) { · {{ dl.assignee }} }
+                </div>
+                @if (dl.openSubtasks.length) {
+                  <div class="small muted">Open: {{ dl.openSubtasks.length }} sub-task(s) — {{ dl.openSubtasks[0].summary }}@if (dl.openSubtasks.length > 1) {…}</div>
+                }
               </div>
-              <span class="badge" [class.red]="dl.dueDate! < d.today">{{ dl.dueDate | date: 'dd/MM' }}</span>
+              <div class="right">
+                <span class="badge" [class.red]="dl.flags.includes('overdue')">{{ dl.dueDate | date: 'dd/MM' }}</span>
+                <app-flag-badges [flags]="dl.flags" />
+              </div>
             </li>
           }
         </ul>
       } @else {
-        <div class="empty">Nothing due. Deadlines arrive from Jira via the Claude sync.</div>
+        <div class="empty">Nothing due. Phases arrive from Jira via the Claude sync.</div>
       }
     </div>
   </section>

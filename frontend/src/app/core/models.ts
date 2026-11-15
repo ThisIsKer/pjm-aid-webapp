@@ -16,25 +16,58 @@ export interface Project {
   mailKeywords: string[];
   mailDomains: string[];
   active: boolean;
+  role: 'pm' | 'contributor';
+  origin: 'manual' | 'jira';
   // computed by the API
+  currentPhase: { name: string; startsOn: string | null } | null;
+  jiraRag: Rag;
+  jiraRagReason: string;
+  openPhases: number;
   overdue: number;
+  atRisk: number;
+  dataGaps: number;
   nextDeadline: string | null;
   needsReply: number;
   missingDocs: number;
+  uncheckedDocs: number;
+  sharepointFolderUri: string | null;
+}
+
+export type Flag = 'overdue' | 'at_risk' | 'missing_due' | 'missing_start' | 'missing_estimate';
+
+export interface JiraEpic {
+  key: string;
+  projectId: string | null;
+  projectName?: string | null;
+  summary: string | null;
+  status: string | null;
+  mine: boolean;
+  url: string | null;
+  active: boolean;
 }
 
 export interface Deadline {
   id: string;
-  projectId: string;
-  projectName?: string;
+  projectId: string | null;
+  effProjectId: string | null;
+  projectName?: string | null;
+  epicKey: string | null;
+  epicSummary: string | null;
   title: string;
+  phaseName: string | null;
   startDate: string | null;
   dueDate: string | null;
   source: 'jira' | 'manual' | 'claude';
   sourceRef: string | null;
+  url: string | null;
+  statusName: string | null;
   assignee: string | null;
+  assignedToMe: boolean;
+  originalHours: number | null;
   remainingHours: number | null;
+  openSubtasks: { key: string; summary: string; assignee?: string | null }[];
   state: 'open' | 'done';
+  flags: Flag[];
 }
 
 export type MailCategory = 'needs_reply' | 'waiting' | 'fyi';
@@ -63,10 +96,14 @@ export interface DocRequirement {
   title: string;
   repository: 'sharepoint' | 'confluence';
   locationHint: string | null;
+  requiredFrom: string | null;
   checkStatus: 'missing' | 'present' | 'outdated' | 'unknown';
   foundUrl: string | null;
   checkedAt: string | null;
   waived: boolean;
+  required: boolean;
+  projectPhase?: string | null;
+  projectFolderUrl?: string | null;
 }
 
 export interface SyncRun {
@@ -80,7 +117,7 @@ export interface SyncRun {
 export interface Dashboard {
   today: string;
   horizon: string;
-  kpis: { activeProjects: number; overdue: number; dueSoon: number; needsReply: number; missingDocs: number };
+  kpis: { activeProjects: number; overdue: number; atRisk: number; dueSoon: number; needsReply: number; missingDocs: number; uncheckedDocs: number };
   projects: Project[];
   deadlines: Deadline[];
   lastSync: SyncRun | null;

@@ -20,6 +20,10 @@ export class Api {
     return firstValueFrom(this.http.patch<DocRequirement>(`/api/docs/${id}`, body));
   }
 
+  linkEpic(key: string, projectId: string) {
+    return firstValueFrom(this.http.patch(`/api/jira/epics/${key}`, { projectId }));
+  }
+
   importSnapshot(force = false) {
     return firstValueFrom(
       this.http.post<{ imported: boolean; reason?: string; warnings?: string[] }>(`/api/sync/import?force=${force}`, {}),

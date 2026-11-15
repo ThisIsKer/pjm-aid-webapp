@@ -2,22 +2,37 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { transaction } from './db.ts';
+import { applyDocTemplate } from './seed.ts';
+import type { Rag } from './flags.ts';
 
 /**
- * Snapshot contract v1 — written by the Claude "pjm-sync" skill into data/inbox/snapshot.json.
- * Claude owns the fields below; user-owned fields (project status, pm note, mail user_state,
- * doc waivers) are never overwritten by an import. See docs/ARCHITECTURE.md.
+ * Snapshot contract v2 — produced by the Claude `pjm-sync` skill (via tools/build-snapshot.ts) into
+ * data/inbox/snapshot.json. Claude owns these fields; user-owned fields (project status/phase/note,
+ * epic→project links, mail user_state, doc waivers) are never overwritten. See docs/ARCHITECTURE.md.
  */
-export interface SnapshotV1 {
-  schemaVersion: 1;
+export interface SnapshotEpic {
+  key: string; summary: string; status?: string; statusCategory?: string; startDate?: string | null;
+  dueDate?: string | null; assignee?: string | null; mine: boolean; url?: string;
+}
+export interface SnapshotPhase {
+  key: string; epicKey: string; summary: string; phaseName?: string; status?: string; statusCategory?: string;
+  startDate?: string | null; dueDate?: string | null; assignee?: string | null; assignedToMe?: boolean;
+  originalHours?: number | null; remainingHours?: number | null; url?: string;
+  openSubtasks?: { key: string; summary: string; assignee?: string | null }[];
+}
+export interface SnapshotV2 {
+  schemaVersion: 2;
   generatedAt: string;
-  /** When true, Jira deadlines / mail threads absent from this snapshot are considered closed. */
+  /** When true, Jira phases / epics absent from this snapshot are considered closed. */
   complete?: boolean;
-  projects?: { id: string; suggestedStatus?: Status; suggestedReason?: string }[];
-  deadlines?: {
-    id: string; projectId: string; title: string; dueDate?: string; startDate?: string;
-    source?: 'jira' | 'claude'; sourceRef?: string; assignee?: string; remainingHours?: number; state?: 'open' | 'done';
-  }[];
+  jira?: { epics: SnapshotEpic[]; phases: SnapshotPhase[] };
+  projects?: { id: string; suggestedStatus?: Rag; suggestedReason?: string }[];
+  /** SharePoint project folder found by Claude (the standard "Progetti Clienti/<client>/<year>/<project>" folder). */
+  projectFolders?: { projectId: string; folderUri: string; webUrl?: string }[];
+  /**
+   * Mail is incremental: only threads Claude looked at in this run (window since the last sync).
+   * Threads not included are left untouched — they are closed by the user or updated by a later run.
+   */
   mailThreads?: {
     id: string; projectId?: string | null; subject: string; counterpart?: string; lastMessageAt?: string;
     lastFromMe?: boolean; category: 'needs_reply' | 'waiting' | 'fyi'; urgency?: 'high' | 'normal' | 'low';
@@ -25,7 +40,6 @@ export interface SnapshotV1 {
   }[];
   docChecks?: { requirementId: string; status: 'missing' | 'present' | 'outdated' | 'unknown'; foundUrl?: string; checkedAt?: string }[];
 }
-type Status = 'green' | 'amber' | 'red' | 'grey';
 
 export interface ImportResult {
   imported: boolean;
@@ -37,95 +51,142 @@ export interface ImportResult {
 export function importSnapshotIfPresent(db: DatabaseSync, file: string, force = false): ImportResult {
   if (!fs.existsSync(file)) return { imported: false, reason: 'no snapshot file' };
   const raw = fs.readFileSync(file, 'utf8');
+  if (!raw.trim()) return { imported: false, reason: 'snapshot file is empty' };
   const hash = crypto.createHash('sha256').update(raw).digest('hex');
   const last = db.prepare('SELECT file_hash FROM sync_runs ORDER BY id DESC LIMIT 1').get() as { file_hash: string } | undefined;
   if (!force && last?.file_hash === hash) return { imported: false, reason: 'snapshot already imported' };
 
-  const snap = JSON.parse(raw) as SnapshotV1;
-  if (snap.schemaVersion !== 1) throw new Error(`Unsupported snapshot schemaVersion ${String(snap.schemaVersion)}`);
+  const snap = JSON.parse(raw) as SnapshotV2;
+  if (snap.schemaVersion !== 2) throw new Error(`Unsupported snapshot schemaVersion ${String(snap.schemaVersion)} (expected 2)`);
   return importSnapshot(db, snap, hash);
 }
 
-export function importSnapshot(db: DatabaseSync, snap: SnapshotV1, hash: string | null = null): ImportResult {
+/** "SAATI - FEI Germania" → "SAATI" */
+const clientOf = (summary: string) => summary.split(/\s+[-–]\s+/)[0]?.trim() || null;
+const notIn = (ids: string[], col = 'id') => (ids.length ? `AND ${col} NOT IN (${ids.map(() => '?').join(',')})` : '');
+
+export function importSnapshot(db: DatabaseSync, snap: SnapshotV2, hash: string | null = null): ImportResult {
   const warnings: string[] = [];
-  const counts = { projects: 0, deadlines: 0, mailThreads: 0, docChecks: 0, closedDeadlines: 0, closedMail: 0 };
-  const knownProjects = new Set(
-    (db.prepare('SELECT id FROM projects').all() as { id: string }[]).map((r) => r.id),
-  );
-  const known = (id: string | null | undefined, what: string) => {
-    if (id && !knownProjects.has(id)) {
-      warnings.push(`${what}: unknown project "${id}"`);
-      return false;
-    }
-    return true;
+  const counts = {
+    epics: 0, projectsCreated: 0, phases: 0, projects: 0, projectFolders: 0, mailThreads: 0, docChecks: 0,
+    closedPhases: 0, closedEpics: 0, deactivatedProjects: 0,
   };
 
   transaction(db, () => {
+    // ---------- Jira epics → projects ----------
+    const upsertEpic = db.prepare(`
+      INSERT INTO jira_epics (key, summary, status, status_category, start_date, due_date, assignee, mine, url, active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      ON CONFLICT(key) DO UPDATE SET summary = excluded.summary, status = excluded.status,
+        status_category = excluded.status_category, start_date = excluded.start_date, due_date = excluded.due_date,
+        assignee = excluded.assignee, mine = excluded.mine, url = excluded.url, active = 1, updated_at = datetime('now')`);
+    const epicProject = db.prepare('SELECT project_id FROM jira_epics WHERE key = ?');
+    const createProject = db.prepare(`INSERT OR IGNORE INTO projects (id, name, client, role, origin) VALUES (?, ?, ?, ?, 'jira')`);
+    const linkEpic = db.prepare('UPDATE jira_epics SET project_id = ? WHERE key = ?');
+    const seenEpics: string[] = [];
+
+    for (const e of snap.jira?.epics ?? []) {
+      upsertEpic.run(e.key, e.summary, e.status ?? null, e.statusCategory ?? null, e.startDate ?? null,
+        e.dueDate ?? null, e.assignee ?? null, e.mine ? 1 : 0, e.url ?? null);
+      const { project_id } = epicProject.get(e.key) as { project_id: string | null };
+      if (!project_id) {
+        if (Number(createProject.run(e.key, e.summary, clientOf(e.summary), e.mine ? 'pm' : 'contributor').changes)) {
+          applyDocTemplate(db, e.key);
+          counts.projectsCreated++;
+        }
+        linkEpic.run(e.key, e.key);
+      }
+      seenEpics.push(e.key);
+      counts.epics++;
+    }
+
+    // ---------- Jira phases → deadlines ----------
+    const knownEpics = new Set((db.prepare('SELECT key FROM jira_epics').all() as { key: string }[]).map((r) => r.key));
+    const upsertPhase = db.prepare(`
+      INSERT INTO deadlines (id, epic_key, title, phase_name, start_date, due_date, source, source_ref, url, status_name,
+        status_category, assignee, assigned_to_me, original_hours, remaining_hours, open_subtasks, state)
+      VALUES (?, ?, ?, ?, ?, ?, 'jira', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET epic_key = excluded.epic_key, title = excluded.title, phase_name = excluded.phase_name,
+        start_date = excluded.start_date, due_date = excluded.due_date, source_ref = excluded.source_ref, url = excluded.url,
+        status_name = excluded.status_name, status_category = excluded.status_category, assignee = excluded.assignee,
+        assigned_to_me = excluded.assigned_to_me, original_hours = excluded.original_hours,
+        remaining_hours = excluded.remaining_hours, open_subtasks = excluded.open_subtasks, state = excluded.state,
+        updated_at = datetime('now')`);
+    const seenPhases: string[] = [];
+    for (const p of snap.jira?.phases ?? []) {
+      if (!knownEpics.has(p.epicKey)) {
+        warnings.push(`phase ${p.key}: epic ${p.epicKey} not in snapshot`);
+        continue;
+      }
+      upsertPhase.run(
+        p.key, p.epicKey, p.summary, p.phaseName ?? null, p.startDate ?? null, p.dueDate ?? null, p.key, p.url ?? null,
+        p.status ?? null, p.statusCategory ?? null, p.assignee ?? null, p.assignedToMe ? 1 : 0,
+        p.originalHours ?? null, p.remainingHours ?? null, JSON.stringify(p.openSubtasks ?? []),
+        p.statusCategory === 'done' ? 'done' : 'open',
+      );
+      seenPhases.push(p.key);
+      counts.phases++;
+    }
+
+    // ---------- Claude's overall status suggestion ----------
     const updProject = db.prepare(`UPDATE projects SET suggested_status = ?, suggested_reason = ?, updated_at = datetime('now') WHERE id = ?`);
     for (const p of snap.projects ?? []) {
-      if (!known(p.id, 'project')) continue;
-      updProject.run(p.suggestedStatus ?? null, p.suggestedReason ?? null, p.id);
-      counts.projects++;
+      if (Number(updProject.run(p.suggestedStatus ?? null, p.suggestedReason ?? null, p.id).changes)) counts.projects++;
+      else warnings.push(`project: unknown id "${p.id}"`);
     }
 
-    const upsertDeadline = db.prepare(`
-      INSERT INTO deadlines (id, project_id, title, start_date, due_date, source, source_ref, assignee, remaining_hours, state)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        project_id = excluded.project_id, title = excluded.title, start_date = excluded.start_date,
-        due_date = excluded.due_date, source = excluded.source, source_ref = excluded.source_ref,
-        assignee = excluded.assignee, remaining_hours = excluded.remaining_hours, state = excluded.state,
-        updated_at = datetime('now')`);
-    const seenDeadlines: string[] = [];
-    for (const d of snap.deadlines ?? []) {
-      if (!known(d.projectId, `deadline ${d.id}`)) continue;
-      upsertDeadline.run(
-        d.id, d.projectId, d.title, d.startDate ?? null, d.dueDate ?? null, d.source ?? 'jira',
-        d.sourceRef ?? null, d.assignee ?? null, d.remainingHours ?? null, d.state ?? 'open',
-      );
-      seenDeadlines.push(d.id);
-      counts.deadlines++;
+    // ---------- SharePoint project folders ----------
+    const updFolder = db.prepare(`UPDATE projects SET sharepoint_folder_uri = ?, sharepoint_url = COALESCE(sharepoint_url, ?),
+      updated_at = datetime('now') WHERE id = ?`);
+    for (const f of snap.projectFolders ?? []) {
+      if (Number(updFolder.run(f.folderUri, f.webUrl ?? null, f.projectId).changes)) counts.projectFolders++;
+      else warnings.push(`projectFolder: unknown project "${f.projectId}"`);
     }
 
+    // ---------- Mail ----------
+    const knownProjects = new Set((db.prepare('SELECT id FROM projects').all() as { id: string }[]).map((r) => r.id));
     const upsertMail = db.prepare(`
       INSERT INTO mail_threads (id, project_id, subject, counterpart, last_message_at, last_from_me, category, urgency, summary, web_link)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
-        project_id = excluded.project_id, subject = excluded.subject, counterpart = excluded.counterpart,
+        project_id = COALESCE(mail_threads.project_id, excluded.project_id), subject = excluded.subject, counterpart = excluded.counterpart,
         category = excluded.category, urgency = excluded.urgency, summary = excluded.summary, web_link = excluded.web_link,
         last_from_me = excluded.last_from_me,
         -- a new message re-opens a thread the user had closed or snoozed
         user_state = CASE WHEN excluded.last_message_at > COALESCE(mail_threads.last_message_at, '') THEN 'open' ELSE mail_threads.user_state END,
         last_message_at = excluded.last_message_at,
         updated_at = datetime('now')`);
-    const seenMail: string[] = [];
     for (const m of snap.mailThreads ?? []) {
-      const projectId = m.projectId && known(m.projectId, `mail ${m.id}`) ? m.projectId : null;
-      upsertMail.run(
-        m.id, projectId, m.subject, m.counterpart ?? null, m.lastMessageAt ?? null, m.lastFromMe ? 1 : 0,
-        m.category, m.urgency ?? 'normal', m.summary ?? null, m.webLink ?? null,
-      );
-      seenMail.push(m.id);
+      let projectId = m.projectId ?? null;
+      if (projectId && !knownProjects.has(projectId)) {
+        warnings.push(`mail ${m.id}: unknown project "${projectId}"`);
+        projectId = null;
+      }
+      upsertMail.run(m.id, projectId, m.subject, m.counterpart ?? null, m.lastMessageAt ?? null, m.lastFromMe ? 1 : 0,
+        m.category, m.urgency ?? 'normal', m.summary ?? null, m.webLink ?? null);
       counts.mailThreads++;
     }
 
+    // ---------- Documentation checks ----------
     const updDoc = db.prepare(`
       UPDATE doc_requirements SET check_status = ?, found_url = ?, checked_at = ?, updated_at = datetime('now') WHERE id = ?`);
     for (const c of snap.docChecks ?? []) {
-      const res = updDoc.run(c.status, c.foundUrl ?? null, c.checkedAt ?? snap.generatedAt, c.requirementId);
-      if (res.changes === 0) warnings.push(`docCheck: unknown requirement "${c.requirementId}"`);
-      else counts.docChecks++;
+      if (Number(updDoc.run(c.status, c.foundUrl ?? null, c.checkedAt ?? snap.generatedAt, c.requirementId).changes)) counts.docChecks++;
+      else warnings.push(`docCheck: unknown requirement "${c.requirementId}"`);
     }
 
-    if (snap.complete) {
-      // Anything Claude no longer reports is closed — Jira-sourced deadlines and open mail threads only.
-      const notIn = (ids: string[]) => (ids.length ? `AND id NOT IN (${ids.map(() => '?').join(',')})` : '');
-      counts.closedDeadlines = Number(db.prepare(
-        `UPDATE deadlines SET state = 'done', updated_at = datetime('now') WHERE source = 'jira' AND state = 'open' ${notIn(seenDeadlines)}`,
-      ).run(...seenDeadlines).changes);
-      counts.closedMail = Number(db.prepare(
-        `UPDATE mail_threads SET user_state = 'done', updated_at = datetime('now') WHERE user_state != 'done' ${notIn(seenMail)}`,
-      ).run(...seenMail).changes);
+    // ---------- Close what Claude no longer reports ----------
+    if (snap.complete && snap.jira) {
+      counts.closedPhases = Number(db.prepare(
+        `UPDATE deadlines SET state = 'done', updated_at = datetime('now') WHERE source = 'jira' AND state = 'open' ${notIn(seenPhases)}`,
+      ).run(...seenPhases).changes);
+      counts.closedEpics = Number(db.prepare(
+        `UPDATE jira_epics SET active = 0, updated_at = datetime('now') WHERE active = 1 AND summary IS NOT NULL ${notIn(seenEpics, 'key')}`,
+      ).run(...seenEpics).changes);
+      counts.deactivatedProjects = Number(db.prepare(`
+        UPDATE projects SET active = 0, updated_at = datetime('now')
+        WHERE origin = 'jira' AND active = 1
+          AND NOT EXISTS (SELECT 1 FROM jira_epics e WHERE e.project_id = projects.id AND e.active = 1)`).run().changes);
     }
 
     db.prepare('INSERT INTO sync_runs (generated_at, file_hash, counts, warnings) VALUES (?, ?, ?, ?)')

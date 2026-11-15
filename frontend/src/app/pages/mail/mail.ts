@@ -27,14 +27,14 @@ import type { MailCategory, MailThread } from '../../core/models';
               </td>
               <td>{{ m.projectName ?? '—' }}</td>
               <td class="small">{{ m.counterpart }}</td>
-              <td class="small">{{ m.lastMessageAt | date: 'dd/MM HH:mm' }}</td>
+              <td class="small">{{ m.lastMessageAt | date: 'dd/MM HH:mm' }}@if (m.lastFromMe) { <div class="muted">last: me</div> }</td>
               <td style="white-space: nowrap">
                 <button (click)="done(m)">Done</button>
                 <button (click)="snooze(m, 3)">Snooze 3d</button>
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="5" class="empty">Nothing here. Mail threads arrive from Outlook via the Claude sync.</td></tr>
+            <tr><td colspan="5" class="empty">Nothing here. Threads arrive from Outlook with each Claude sync (ask Claude to <em>sync PJM</em>).</td></tr>
           }
         </tbody>
       </table>

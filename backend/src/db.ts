@@ -82,6 +82,75 @@ const MIGRATIONS: string[] = [
     warnings     TEXT
   );
   `,
+  /* v2 — Jira epics become projects; deadlines carry Jira phase data */ `
+  ALTER TABLE projects ADD COLUMN role TEXT NOT NULL DEFAULT 'pm';
+  ALTER TABLE projects ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual';
+
+  CREATE TABLE doc_template (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    phase         TEXT,
+    title         TEXT NOT NULL,
+    repository    TEXT NOT NULL CHECK (repository IN ('sharepoint','confluence')),
+    location_hint TEXT
+  );
+
+  CREATE TABLE jira_epics (
+    key             TEXT PRIMARY KEY,
+    project_id      TEXT REFERENCES projects(id) ON DELETE SET NULL,
+    summary         TEXT,
+    status          TEXT,
+    status_category TEXT,
+    start_date      TEXT,
+    due_date        TEXT,
+    assignee        TEXT,
+    mine            INTEGER NOT NULL DEFAULT 0,
+    url             TEXT,
+    active          INTEGER NOT NULL DEFAULT 1,
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  INSERT OR IGNORE INTO jira_epics (key, project_id)
+    SELECT j.value, p.id FROM projects p, json_each(p.jira_keys) j;
+  ALTER TABLE projects DROP COLUMN jira_keys;
+
+  DROP TABLE deadlines;
+  CREATE TABLE deadlines (
+    id              TEXT PRIMARY KEY,
+    project_id      TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    epic_key        TEXT REFERENCES jira_epics(key) ON DELETE CASCADE,
+    title           TEXT NOT NULL,
+    phase_name      TEXT,
+    start_date      TEXT,
+    due_date        TEXT,
+    source          TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('jira','manual','claude')),
+    source_ref      TEXT,
+    url             TEXT,
+    status_name     TEXT,
+    status_category TEXT,
+    assignee        TEXT,
+    assigned_to_me  INTEGER NOT NULL DEFAULT 0,
+    original_hours  REAL,
+    remaining_hours REAL,
+    open_subtasks   TEXT NOT NULL DEFAULT '[]',
+    state           TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','done')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (project_id IS NOT NULL OR epic_key IS NOT NULL)
+  );
+  CREATE INDEX ix_deadlines_due ON deadlines(due_date);
+  CREATE INDEX ix_deadlines_epic ON deadlines(epic_key);
+
+  -- Effective project of a deadline: its own (manual) or the one its Jira epic is linked to.
+  CREATE VIEW v_deadlines AS
+    SELECT d.*, COALESCE(d.project_id, e.project_id) AS eff_project_id, e.summary AS epic_summary
+    FROM deadlines d LEFT JOIN jira_epics e ON e.key = d.epic_key;
+  `,
+  /* v3 — phase-gated documentation checklist, SharePoint project folder */ `
+  ALTER TABLE projects ADD COLUMN sharepoint_folder_uri TEXT;
+  ALTER TABLE doc_template ADD COLUMN required_from TEXT;
+  ALTER TABLE doc_template ADD COLUMN client_match TEXT;
+  ALTER TABLE doc_requirements ADD COLUMN required_from TEXT;
+  ALTER TABLE doc_requirements ADD COLUMN from_template INTEGER NOT NULL DEFAULT 0;
+  UPDATE doc_requirements SET from_template = 1;
+  `,
 ];
 
 export function openDb(file: string): DatabaseSync {

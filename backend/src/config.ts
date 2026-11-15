@@ -12,5 +12,7 @@ export const config = {
   dbFile: path.join(dataDir, 'pjm.db'),
   seedFile: path.join(dataDir, 'seed.json'),
   snapshotFile: path.join(dataDir, 'inbox', 'snapshot.json'),
+  /** Read by the Claude pjm-sync skill: projects, doc checklist and open mail threads. */
+  registryFile: path.join(dataDir, 'registry.json'),
   frontendDist: path.join(root, 'frontend', 'dist', 'frontend', 'browser'),
 };

@@ -1,34 +1,70 @@
 {
-  "$comment": "Copy to data/seed.json (git-ignored) and replace with your real projects. Loaded only when the database is empty — run `npm run db:reset` to reload.",
+  "$comment": "Copy to data/seed.json (git-ignored). docTemplate = documentation checklist applied to every project (re-read at each start). A document counts as missing once the project reaches `requiredFrom` (default: the phase after `phase`); `clientMatch` limits an item to matching project names. `projects` is only for grouping several Jira epics or for non-Jira work (loaded into an empty DB).",
   "docTemplate": [
-    { "phase": "Analysis", "title": "Analisi funzionale", "repository": "sharepoint", "locationHint": "Teams > Documents > 01 Analisi" },
-    { "phase": "Design", "title": "Specifica tecnica", "repository": "sharepoint", "locationHint": "Teams > Documents > 02 Design" },
-    { "phase": "Test", "title": "Piano di test / UAT", "repository": "sharepoint", "locationHint": "Teams > Documents > 03 Test" },
-    { "phase": "Closing", "title": "Verbale di collaudo", "repository": "sharepoint", "locationHint": "Teams > Documents > 04 Chiusura" },
-    { "phase": "Closing", "title": "Documentazione di prodotto aggiornata", "repository": "confluence" }
+    {
+      "phase": "Analisi",
+      "title": "Documento di analisi",
+      "repository": "sharepoint",
+      "locationHint": "3. Analisi, or 99. Project documents"
+    },
+    {
+      "phase": "Implementazione",
+      "requiredFrom": "Implementazione",
+      "title": "Open Topics Log",
+      "repository": "sharepoint",
+      "locationHint": "4. Implementazione"
+    },
+    {
+      "phase": "Test interni",
+      "title": "Verbale system test",
+      "repository": "sharepoint",
+      "locationHint": "4. Implementazione or 5. UAT"
+    },
+    {
+      "phase": "UAT",
+      "requiredFrom": "UAT",
+      "title": "Testbook UAT",
+      "repository": "sharepoint",
+      "locationHint": "5. UAT, or 99. Project documents/UAT"
+    },
+    {
+      "phase": "UAT",
+      "title": "Verbale di collaudo UAT",
+      "repository": "sharepoint",
+      "locationHint": "5. UAT"
+    },
+    {
+      "phase": "Live",
+      "requiredFrom": "Live",
+      "title": "Piano di cutover / go-live",
+      "repository": "sharepoint",
+      "locationHint": "6. Cutover - Live"
+    },
+    {
+      "phase": "Post GoLive",
+      "requiredFrom": "Post GoLive",
+      "title": "Documentazione di prodotto aggiornata",
+      "repository": "confluence",
+      "clientMatch": "^Tecnica",
+      "locationHint": "Product documentation space"
+    }
   ],
   "projects": [
     {
-      "id": "acme-einvoicing",
-      "name": "ACME – E-invoicing rollout",
-      "client": "ACME S.p.A.",
-      "phase": "Design",
-      "jiraKeys": ["DDMD-100"],
-      "sharepointUrl": "https://example.sharepoint.com/sites/acme-einvoicing",
-      "confluenceSpace": "PROD",
-      "mailKeywords": ["ACME", "e-invoicing"],
-      "mailDomains": ["acme.example"]
-    },
-    {
-      "id": "globex-dms",
-      "name": "Globex – DMS migration",
-      "client": "Globex Corp.",
-      "phase": "Test",
-      "jiraKeys": ["DDMD-200"],
-      "mailKeywords": ["Globex", "migrazione"],
-      "mailDomains": ["globex.example"],
-      "docs": [
-        { "phase": "Test", "title": "Report di migrazione", "repository": "sharepoint" }
+      "id": "acme-fei-sk",
+      "name": "ACME – FEI Slovakia (client + technical epics)",
+      "client": "ACME",
+      "jiraKeys": [
+        "DDMD-100",
+        "DDMD-101"
+      ],
+      "sharepointUrl": "https://example.sharepoint.com/sites/acme",
+      "mailKeywords": [
+        "ACME",
+        "Slovakia"
+      ],
+      "mailDomains": [
+        "acme.example"
       ]
     }
   ]

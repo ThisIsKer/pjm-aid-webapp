@@ -3,22 +3,42 @@ import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { config } from './config.ts';
 import { openDb } from './db.ts';
-import { seedIfEmpty } from './seed.ts';
+import { exportRegistry } from './registry.ts';
+import { seedIfEmpty, syncDocTemplate } from './seed.ts';
 import { importSnapshotIfPresent } from './snapshot.ts';
 import { apiRouter } from './routes.ts';
 
 const db = openDb(config.dbFile);
 seedIfEmpty(db, config.seedFile);
+syncDocTemplate(db, config.seedFile);
 
-try {
-  const result = importSnapshotIfPresent(db, config.snapshotFile);
-  if (result.imported) console.log('[sync] Imported snapshot', result.counts, result.warnings?.length ? result.warnings : '');
-} catch (err) {
-  console.error('[sync] Snapshot import failed:', (err as Error).message);
+function tryImport() {
+  try {
+    const result = importSnapshotIfPresent(db, config.snapshotFile);
+    if (result.imported) console.log('[sync] Imported snapshot', result.counts, result.warnings?.length ? result.warnings : '');
+  } catch (err) {
+    console.error('[sync] Snapshot import failed:', (err as Error).message);
+  }
+  exportRegistry(db);
 }
+tryImport();
+
+// Auto-import whenever Claude writes a new data/inbox/snapshot.json (debounced: the file may be written in chunks).
+let importTimer: NodeJS.Timeout | undefined;
+fs.mkdirSync(path.dirname(config.snapshotFile), { recursive: true });
+fs.watch(path.dirname(config.snapshotFile), (_event, filename) => {
+  if (filename && filename !== path.basename(config.snapshotFile)) return;
+  clearTimeout(importTimer);
+  importTimer = setTimeout(tryImport, 1500);
+});
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
+// Keep data/registry.json (read by Claude) in step with every change made through the API.
+app.use('/api', (req, res, next) => {
+  if (req.method !== 'GET') res.on('finish', () => res.statusCode < 400 && exportRegistry(db));
+  next();
+});
 app.use('/api', apiRouter(db));
 
 // Production mode: serve the built Angular app from the same port.
