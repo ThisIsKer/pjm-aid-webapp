@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Api } from '../../core/api';
 import { I18n, TPipe, type Lang } from '../../core/i18n';
-import type { AgentStatus } from '../../core/models';
+import type { AgentStatus, SpStatus } from '../../core/models';
 import { SyncService } from '../../core/sync';
 import { Theme, type ThemeChoice } from '../../core/theme';
 import { SyncButton } from '../../shared/sync-button';
@@ -59,6 +59,43 @@ import { SyncProgress } from '../../shared/sync-progress';
       </div>
 
       <div class="card">
+        <h2>{{ 'sp.title' | t }}</h2>
+        <p class="help small muted">{{ 'sp.help' | t }}</p>
+        @if (sp.value(); as s) {
+          <div class="setting">
+            <div>
+              <div class="label">{{ 'sp.use' | t }}</div>
+              <div class="help">
+                @if (!s.enabled) { {{ 'sp.off' | t }} }
+                @else if (s.available) {
+                  <span class="green-text">{{ 'sp.ok' | t: { m: s.mapped, n: s.projects } }}</span>
+                  @if (s.lastScanAt) { · {{ 'sp.lastScan' | t: { d: (s.lastScanAt | date: 'dd/MM HH:mm' : undefined : i18n.locale()) } }} }
+                } @else { <span class="red-text">{{ 'sp.missing' | t }}</span> }
+              </div>
+            </div>
+            <div class="segmented">
+              <button [class.on]="s.enabled" (click)="saveSp({ enabled: true })">{{ 'common.on' | t }}</button>
+              <button [class.on]="!s.enabled" (click)="saveSp({ enabled: false })">{{ 'common.off' | t }}</button>
+            </div>
+          </div>
+          <div class="setting stack">
+            <label class="form-label">{{ 'sp.folder' | t }} <span class="muted">— {{ 'sp.folderHelp' | t }}</span>
+              <input [value]="s.localRoot" #root />
+            </label>
+            <details class="small">
+              <summary class="muted">{{ 'sp.advanced' | t }}</summary>
+              <label class="form-label">{{ 'sp.web' | t }} <input [value]="s.webBase" #web /></label>
+            </details>
+            <div class="sync-now">
+              @if (spMessage(); as m) { <span class="small muted">{{ m }}</span> }
+              <button (click)="rescan()" [disabled]="!s.enabled || scanning()">{{ 'sp.rescan' | t }}</button>
+              <button class="primary" (click)="saveSp({ localRoot: root.value, webBase: web.value })">{{ 'common.save' | t }}</button>
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="card">
         <h2>{{ 'set.appearance' | t }}</h2>
         <div class="setting">
           <div>
@@ -109,6 +146,27 @@ export class SettingsPage {
   protected readonly langs: { id: Lang; label: string }[] = [{ id: 'it', label: 'Italiano' }, { id: 'en', label: 'English' }];
   protected readonly themes: ThemeChoice[] = ['light', 'dark', 'system'];
   protected readonly importMessage = signal<string | null>(null);
+  protected readonly sp = httpResource<SpStatus>(() => '/api/settings/sharepoint');
+  protected readonly spMessage = signal<string | null>(null);
+  protected readonly scanning = signal(false);
+
+  protected async saveSp(body: Partial<Pick<SpStatus, 'enabled' | 'localRoot' | 'webBase'>>) {
+    this.sp.set(await this.api.saveSharePoint(body));
+    this.spMessage.set(null);
+    this.sync.notifyChanged();
+  }
+
+  protected async rescan() {
+    this.scanning.set(true);
+    try {
+      const r = await this.api.scanSharePoint();
+      this.sp.set(r.status);
+      this.spMessage.set(this.i18n.t('sp.scanned', { f: r.files, m: r.mapped }));
+      this.sync.notifyChanged();
+    } finally {
+      this.scanning.set(false);
+    }
+  }
   protected readonly agent = httpResource<AgentStatus>(() => '/api/sync/agent');
   protected readonly health = httpResource<{ lastSync: { generatedAt: string | null } | null }>(() => '/api/health');
 

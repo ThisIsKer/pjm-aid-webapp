@@ -192,4 +192,10 @@ export interface DayPlan {
 
 /** A file of the project's SharePoint folder, as listed by Claude's last documentation check. */
 export interface ProjectFile { path: string; url: string; modifiedAt: string | null; size: number | null }
-export interface ProjectFiles { folderUrl: string | null; scannedAt: string | null; files: ProjectFile[] }
+export interface ProjectFiles { folderUrl: string | null; scannedAt: string | null; source: 'local' | 'claude'; files: ProjectFile[] }
+
+/** SharePoint "Progetti Clienti" synced by OneDrive on this PC. */
+export interface SpStatus {
+  enabled: boolean; localRoot: string; webBase: string; available: boolean;
+  projects: number; mapped: number; lastScanAt: string | null;
+}

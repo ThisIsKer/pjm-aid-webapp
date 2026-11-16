@@ -57,7 +57,7 @@ import type { DocRequirement, ProjectFile, ProjectFiles } from '../core/models';
                 }
               </ul>
               <div class="small muted">
-                {{ 'path.listedOn' | t: { d: (listing()?.scannedAt | date: 'dd/MM/yy HH:mm' : undefined : i18n.locale()) } }}
+                {{ (listing()?.source === 'local' ? 'path.listedLocal' : 'path.listedOn') | t: { d: (listing()?.scannedAt | date: 'dd/MM/yy HH:mm' : undefined : i18n.locale()) } }}
                 @if (listing()?.folderUrl) { · <a [href]="listing()!.folderUrl" target="_blank">{{ 'path.openSp' | t }}</a> }
               </div>
             }

@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { getSpSettings, rootAvailable, saveSpSettings, scanLocalSharePoint } from './localsp.ts';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { agentStatus, currentOrLastJob, recentJobs, startSync, type SyncMode, autoSync } from './agent.ts';
 import { config } from './config.ts';
@@ -49,7 +50,7 @@ const lastSync = (db: DatabaseSync) => {
   return last ? toApi(last) : null;
 };
 
-export function apiRouter(db: DatabaseSync): Router {
+export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void }): Router {
   const r = Router();
 
   r.get('/health', (_req, res) => res.json({ ok: true, today: isoToday(), lastSync: lastSync(db) }));
@@ -242,11 +243,13 @@ export function apiRouter(db: DatabaseSync): Router {
 
   /** Files of the project's SharePoint folder, as listed by the last documentation check (folder browser). */
   r.get('/projects/:id/files', (req, res) => {
-    const p = db.prepare('SELECT sharepoint_url, files_scanned_at FROM projects WHERE id = ?').get(param(req, 'id')) as
-      { sharepoint_url: string | null; files_scanned_at: string | null } | undefined;
+    // refresh=true: re-read the OneDrive-synced folder first (fast: names and dates only)
+    if (req.query['refresh'] === 'true') scanLocalSharePoint(db, param(req, 'id'));
+    const p = db.prepare('SELECT sharepoint_url, files_scanned_at, files_source FROM projects WHERE id = ?').get(param(req, 'id')) as
+      { sharepoint_url: string | null; files_scanned_at: string | null; files_source: string | null } | undefined;
     if (!p) return notFound(res);
     res.json({
-      folderUrl: p.sharepoint_url, scannedAt: p.files_scanned_at,
+      folderUrl: p.sharepoint_url, scannedAt: p.files_scanned_at, source: p.files_source ?? 'claude',
       files: toApiList(db.prepare('SELECT path, url, modified_at, size FROM project_files WHERE project_id = ? ORDER BY path').all(param(req, 'id'))),
     });
   });
@@ -311,6 +314,27 @@ export function apiRouter(db: DatabaseSync): Router {
     });
     if (!changes) return notFound(res);
     res.json(toApi(db.prepare('SELECT * FROM doc_requirements WHERE id = ?').get(param(req, 'id'))));
+  });
+
+  // ---------- SharePoint folder synced on this PC (OneDrive) ----------
+  const spStatus = () => {
+    const s = getSpSettings(db);
+    const available = s.enabled && rootAvailable(s);
+    const stats = db.prepare(`SELECT COUNT(*) AS projects, SUM(files_source = 'local') AS mapped, MAX(CASE WHEN files_source = 'local'
+      THEN files_scanned_at END) AS lastScanAt FROM projects WHERE active = 1`).get() as { projects: number; mapped: number | null; lastScanAt: string | null };
+    return { ...s, available, projects: stats.projects, mapped: stats.mapped ?? 0, lastScanAt: stats.lastScanAt };
+  };
+  r.get('/settings/sharepoint', (_req, res) => res.json(spStatus()));
+  r.put('/settings/sharepoint', (req, res) => {
+    const b = req.body as { enabled?: boolean; localRoot?: string; webBase?: string };
+    saveSpSettings(db, { enabled: b.enabled, localRoot: b.localRoot, webBase: b.webBase });
+    if (getSpSettings(db).enabled === false) db.prepare(`UPDATE projects SET files_source = NULL WHERE files_source = 'local'`).run();
+    sharepoint?.rescan();
+    res.json(spStatus());
+  });
+  r.post('/sharepoint/scan', (_req, res) => {
+    const result = scanLocalSharePoint(db);
+    res.json({ ...result, status: spStatus() });
   });
 
   // ---------- Sync (Claude snapshot import) ----------

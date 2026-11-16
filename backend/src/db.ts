@@ -215,6 +215,11 @@ const MIGRATIONS: string[] = [
   ALTER TABLE projects ADD COLUMN files_scanned_at TEXT;
   ALTER TABLE doc_requirements ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
   `,
+  /* v9 — app settings (SharePoint folder synced on this PC), file-list source, checklist keywords */ `
+  CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);
+  ALTER TABLE projects ADD COLUMN files_source TEXT;
+  ALTER TABLE doc_template ADD COLUMN keywords TEXT;
+  `,
 ];
 
 export function openDb(file: string): DatabaseSync {

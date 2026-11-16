@@ -197,11 +197,13 @@ export function importSnapshot(db: DatabaseSync, snap: SnapshotV2, hash: string 
     const updDoc = db.prepare(`
       UPDATE doc_requirements SET check_status = ?, found_url = ?, found_path = ?, found_modified_at = ?, checked_at = ?,
         updated_at = datetime('now') WHERE id = ?`);
-    const isPinned = db.prepare('SELECT pinned FROM doc_requirements WHERE id = ?');
+    const isPinned = db.prepare(`SELECT d.pinned, d.repository, p.files_source FROM doc_requirements d
+      JOIN projects p ON p.id = d.project_id WHERE d.id = ?`);
     for (const c of snap.docChecks ?? []) {
-      // A location chosen by the user wins over Claude's match; it is refreshed from the file listing below.
-      const pin = isPinned.get(c.requirementId) as { pinned: number } | undefined;
-      if (pin?.pinned) { counts.docChecks++; continue; }
+      // A location chosen by the user wins over Claude's match (refreshed from the file listing below), and so does
+      // the app's own check of the OneDrive copy of the project folder.
+      const pin = isPinned.get(c.requirementId) as { pinned: number; repository: string; files_source: string | null } | undefined;
+      if (pin?.pinned || (pin?.repository === 'sharepoint' && pin.files_source === 'local')) { counts.docChecks++; continue; }
       const present = c.status === 'present' || c.status === 'outdated';
       if (Number(updDoc.run(c.status, present ? c.foundUrl ?? null : null, present ? c.foundPath ?? null : null,
         present ? c.modifiedAt ?? null : null, c.checkedAt ?? snap.generatedAt, c.requirementId).changes)) counts.docChecks++;
@@ -210,10 +212,13 @@ export function importSnapshot(db: DatabaseSync, snap: SnapshotV2, hash: string 
 
     // ---------- Project folder listings (folder browser) + refresh of user-chosen files ----------
     for (const pf of snap.projectFiles ?? []) {
-      if (!db.prepare('SELECT 1 FROM projects WHERE id = ?').get(pf.projectId)) {
+      const proj = db.prepare('SELECT files_source FROM projects WHERE id = ?').get(pf.projectId) as { files_source: string | null } | undefined;
+      if (!proj) {
         warnings.push(`projectFiles: unknown project "${pf.projectId}"`);
         continue;
       }
+      if (proj.files_source === 'local') continue; // listed from the OneDrive copy on this PC
+      db.prepare(`UPDATE projects SET files_source = 'claude' WHERE id = ?`).run(pf.projectId);
       db.prepare('DELETE FROM project_files WHERE project_id = ?').run(pf.projectId);
       const ins = db.prepare('INSERT OR REPLACE INTO project_files (project_id, path, url, modified_at, size) VALUES (?, ?, ?, ?, ?)');
       for (const f of pf.files) ins.run(pf.projectId, f.path, f.url, f.modifiedAt ?? null, f.size ?? null);

@@ -14,6 +14,8 @@ interface SeedDoc {
   locationHint?: string;
   /** Only for projects whose name matches this regex (case-insensitive), e.g. "^Tecnica". */
   clientMatch?: string;
+  /** Words that identify the file in the project folder (case-insensitive); default: from the title. */
+  keywords?: string[];
 }
 
 interface SeedProject {
@@ -58,9 +60,11 @@ export function syncDocTemplate(db: DatabaseSync, seedFile: string): void {
   if (!template) return;
   transaction(db, () => {
     db.exec('DELETE FROM doc_template');
-    const ins = db.prepare('INSERT INTO doc_template (phase, required_from, title, repository, location_hint, client_match) VALUES (?, ?, ?, ?, ?, ?)');
+    const ins = db.prepare(`INSERT INTO doc_template (phase, required_from, title, repository, location_hint, client_match, keywords)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`);
     for (const d of template) {
-      ins.run(d.phase ?? null, d.requiredFrom ?? null, d.title, d.repository, d.locationHint ?? null, d.clientMatch ?? null);
+      ins.run(d.phase ?? null, d.requiredFrom ?? null, d.title, d.repository, d.locationHint ?? null, d.clientMatch ?? null,
+        d.keywords?.length ? JSON.stringify(d.keywords) : null);
     }
     for (const { id } of db.prepare('SELECT id FROM projects').all() as { id: string }[]) applyDocTemplate(db, id);
   });

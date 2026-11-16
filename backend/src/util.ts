@@ -1,5 +1,5 @@
 const JSON_COLUMNS = new Set(['jira_keys', 'mail_keywords', 'mail_domains', 'counts', 'warnings', 'open_subtasks', 'flags', 'steps', 'denials', 'attendees']);
-const BOOL_COLUMNS = new Set(['active', 'last_from_me', 'waived', 'mine', 'assigned_to_me', 'from_template', 'imported', 'is_all_day', 'is_cancelled', 'is_organizer']);
+const BOOL_COLUMNS = new Set(['active', 'last_from_me', 'waived', 'mine', 'assigned_to_me', 'from_template', 'imported', 'is_all_day', 'is_cancelled', 'is_organizer', 'pinned']);
 
 /** Converts a snake_case DB row into the camelCase JSON the frontend expects. */
 export function toApi<T = Record<string, unknown>>(row: unknown): T {

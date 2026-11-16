@@ -147,11 +147,28 @@ due; yellow = new + updated. The Documentation page shows one square tile per pr
 a tile opens the checklist with "Where" (file link, sub-folder, last change — or the project folder and the expected
 sub-folder), state, and the **Ok** / **Not needed** buttons (same cells on the project page).
 
+**SharePoint on this PC (OneDrive)** — `backend/src/localsp.ts`. The DDM SOLUTIONS library is synced by OneDrive
+(`%USERPROFILE%\OneDrive - Archiva Group\DDM SOLUTIONS - Documenti\Delivery\Progetti Clienti`, editable in Settings
+together with the matching web address). The backend reads only names, dates and sizes (never file content, so
+online-only placeholders stay online-only):
+- **project folder**: the project's SharePoint link if it points inside Progetti Clienti, otherwise found by itself —
+  client folder (name match, e.g. "G.D. DORIGO S.P.A." → "GD Dorigo"), year of the project start (then next,
+  previous, newest), project folder sharing at least one specific word with the epic topic (synonyms FEI/FE,
+  DE/Germania, FR/Francia, SK/Slovacchia…); the found folder is saved as the project's SharePoint link;
+- **file list** → `project_files` (`files_source = 'local'`), used by the folder browser;
+- **documents**: each non-waived SharePoint checklist item is matched by keywords on the file name (folder names
+  count less; the item's `locationHint` folder is preferred; "0. Offerta" ignored; newest wins). Defaults per title,
+  overridable with `"keywords": [...]` on a `docTemplate` item in `data/seed.json`;
+- when: at start, on every change under the folder (Windows recursive watch, 10 s debounce), every 15 minutes, on
+  "Read again" in Settings and when the folder browser opens.
+For these projects Claude's SharePoint results are ignored and the registry marks them `localScan: true`, so the
+skill skips SharePoint for them. Projects without a folder on the PC keep the Claude check.
+
 **Choosing the file yourself** — the pencil in the "Where" cell opens *Where is this document?*: browse the
 project folder (sub-folders, files with their last change, search across the whole folder) and pick the file, or
-type a path below the project folder / paste a link. The folder tree comes from the listing Claude writes at each
-documentation check (`files.json` → snapshot `projectFiles` → table `project_files`); the app itself has no
-SharePoint access, so the tree is as fresh as the last docs sync. The chosen location is **pinned**: Claude's
+type a path below the project folder / paste a link. The folder tree is read live from the OneDrive copy on the PC
+(re-read when the dialog opens); for projects without a folder on the PC it comes from the listing Claude writes at
+each documentation check (`files.json` → snapshot `projectFiles` → table `project_files`). The chosen location is **pinned**: Claude's
 matching no longer changes it, and at each new listing the app follows that file (newer date → *updated*; file gone
 → *missing*, shown as "No longer there"). Choosing a file counts as OK for its current version. "Back to automatic
 detection" removes the pin.
@@ -174,12 +191,12 @@ grey → n/a.
 stages it to know projects, current phases, SharePoint folders, the checklist with `required` flags, open mail
 threads and the last sync time.
 
-## 6. Database schema (v8)
+## 6. Database schema (v9)
 
 `projects` · `project_groups` · `project_files` · `jira_epics` · `deadlines` (+ view `v_deadlines` resolving each phase's project through its epic) ·
 `mail_threads` · `calendar_events` · `doc_requirements` · `doc_template` · `sync_runs` · `sync_jobs` — see `backend/src/db.ts`.
 Migrations are append-only and tracked with `PRAGMA user_version` (v3 adds `projects.sharepoint_folder_uri`,
-`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`; v8 adds `project_files`, `projects.files_scanned_at`, `doc_requirements.pinned`). Requirement id = `<projectId>--<slug(title)>`, which is the id
+`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`; v8 adds `project_files`, `projects.files_scanned_at`, `doc_requirements.pinned`; v9 adds `app_settings`, `projects.files_source`, `doc_template.keywords`). Requirement id = `<projectId>--<slug(title)>`, which is the id
 Claude reports back in `docChecks`.
 
 ## 7. Snapshot contract v2 (`data/inbox/snapshot.json`)
@@ -232,7 +249,9 @@ Full example: `docs/examples/snapshot.example.json`.
 | GET | `/today?date=` | day plan: activities with hours for the day, meetings, load |
 | GET | `/docs?all=true` | documents needing attention (default: missing and due, new, updated) or the full checklist with `required` and `state` |
 | POST | `/projects/:id/docs` | add a document `{ title, repository, phase?, requiredFrom?, locationHint?, foundUrl? }` (a link marks it present) |
-| GET | `/projects/:id/files` | files of the project folder from the last listing (folder browser) |
+| GET | `/projects/:id/files?refresh=true` | files of the project folder (re-read from the PC first when synced; `source` local / claude) |
+| GET/PUT | `/settings/sharepoint` | OneDrive folder on this PC: `{ enabled, localRoot, webBase }` + status (found, projects linked, last read) |
+| POST | `/sharepoint/scan` | read the synced folder now |
 | PUT/DELETE | `/docs/:id/location` | `{ location }` path below the project folder or link → pinned + OK / back to automatic detection |
 | PATCH | `/docs/:id` | `{ confirmed }` OK / remove OK · `{ waived }` not needed · edit hint |
 | POST | `/sync/import?force=true` | import the snapshot now |
@@ -285,4 +304,5 @@ Full example: `docs/examples/snapshot.example.json`.
 | 4c | Dark theme + Settings page, no-scroll dashboard with per-panel scrollbars, custom project groups | ✅ |
 | 4d | Daily auto-sync with progress layer; sync controls in Settings; documentation tiles, file links from the client/year SharePoint folder, OK confirmation and new/updated detection | ✅ |
 | 4e | Document location editor: folder browser over Claude's listing of the project folder, or path/link; pinned locations followed at each listing | ✅ |
+| 4f | SharePoint read from the OneDrive-synced folder on the PC: folder discovery, live file lists, local document checks | ✅ |
 | 5 | Weekday-morning scheduled sync (daily Jira + mail + calendar, Monday + docs) | at the end |

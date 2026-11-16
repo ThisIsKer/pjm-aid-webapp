@@ -131,6 +131,11 @@ Check **every active registry project** and **every checklist item that is not w
 required, present or not): the app shows where each document is and flags files that are new or were changed
 since Sebastiano confirmed them, so present documents must be re-reported every time with their current version.
 
+**Projects with `localScan: true` in the registry are checked by the app itself** from the OneDrive copy of
+Progetti Clienti on Sebastiano's PC (file list, presence, dates — in real time): skip SharePoint for them entirely
+(no folder search, no listing, no `docs.json`/`files.json` entries for their SharePoint items); only their
+Confluence items, if any, are yours. Do the steps below only for the other projects.
+
 1. **Project folder — always DDM's standard layout** on the DDMSOLUTIONS site:
    `Delivery/Progetti Clienti/<Client>/<Year>/<Project folder>`.
    - Client folder: `sharepoint_folder_search` with the client name (text before " - " in the project name);

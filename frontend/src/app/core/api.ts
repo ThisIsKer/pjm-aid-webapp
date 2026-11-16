@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import type { Deadline, DocRequirement, MailThread, Project, ProjectFiles, ProjectGroup, SyncJob } from './models';
+import type { Deadline, DocRequirement, MailThread, Project, ProjectFiles, ProjectGroup, SpStatus, SyncJob } from './models';
 
 /** Write operations. Reads use httpResource() directly in the pages. */
 @Injectable({ providedIn: 'root' })
@@ -37,8 +37,17 @@ export class Api {
     return firstValueFrom(this.http.delete<{ ok: boolean }>(`/api/groups/${id}`));
   }
 
-  projectFiles(projectId: string) {
-    return firstValueFrom(this.http.get<ProjectFiles>(`/api/projects/${encodeURIComponent(projectId)}/files`));
+  /** refresh: re-read the OneDrive copy of the project folder first. */
+  projectFiles(projectId: string, refresh = true) {
+    return firstValueFrom(this.http.get<ProjectFiles>(`/api/projects/${encodeURIComponent(projectId)}/files?refresh=${refresh}`));
+  }
+
+  saveSharePoint(body: Partial<Pick<SpStatus, 'enabled' | 'localRoot' | 'webBase'>>) {
+    return firstValueFrom(this.http.put<SpStatus>('/api/settings/sharepoint', body));
+  }
+
+  scanSharePoint() {
+    return firstValueFrom(this.http.post<{ mapped: number; projects: number; files: number; discovered: number; status: SpStatus }>('/api/sharepoint/scan', {}));
   }
 
   /** location = path below the project folder, or a full link. */

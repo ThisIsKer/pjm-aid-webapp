@@ -17,6 +17,8 @@ export function exportRegistry(db: DatabaseSync): void {
       id: p['id'], name: p['name'], client: p['client'], group: p['groupName'] ?? null, role: p['role'], active: p['active'],
       jiraKeys: p['jiraKeys'], currentPhase: p.currentPhase, phaseOverride: p['phase'],
       sharepointUrl: p['sharepointUrl'], sharepointFolderUri: p['sharepointFolderUri'],
+      // true: the app reads this project's SharePoint folder from the OneDrive copy on the PC — no SharePoint check needed
+      localScan: p['filesSource'] === 'local',
       confluenceSpace: p['confluenceSpace'], mailKeywords: p['mailKeywords'], mailDomains: p['mailDomains'],
       docs: p.docs.map((d) => ({
         id: d.id, title: d.title, phase: d.phase, repository: d.repository, locationHint: d.locationHint,
