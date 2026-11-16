@@ -161,7 +161,7 @@ server.registerTool('pjm_update_mail', {
 
 server.registerTool('pjm_doc_gaps', {
   title: 'Documentation gaps',
-  description: 'Documents due for the current project phases that are missing, outdated or not checked yet. Optionally for one project.',
+  description: 'Documents that need attention: missing although due for the current phase, or found for the first time / updated since the user confirmed them (state new / updated). Optionally for one project.',
   inputSchema: { project: z.string().optional() },
   annotations: { readOnlyHint: true },
 }, tool(async ({ project }: { project?: string }) => {
@@ -212,6 +212,13 @@ server.registerTool('pjm_waive_doc', {
   inputSchema: { requirementId: z.string(), waived: z.boolean().default(true) },
 }, tool(async ({ requirementId, waived }: { requirementId: string; waived: boolean }) =>
   api(`/docs/${encodeURIComponent(requirementId)}`, { method: 'PATCH', body: { waived } })));
+
+server.registerTool('pjm_confirm_doc', {
+  title: 'Confirm a document is OK',
+  description: 'Marks a documentation requirement as present and OK (the found file in its current version, or by hand when it is kept elsewhere). confirmed=false removes the OK. A document updated after the OK needs attention again.',
+  inputSchema: { requirementId: z.string(), confirmed: z.boolean().default(true) },
+}, tool(async ({ requirementId, confirmed }: { requirementId: string; confirmed: boolean }) =>
+  api(`/docs/${encodeURIComponent(requirementId)}`, { method: 'PATCH', body: { confirmed } })));
 
 server.registerTool('pjm_sync_status', {
   title: 'Sync status',

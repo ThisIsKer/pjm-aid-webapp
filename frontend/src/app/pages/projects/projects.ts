@@ -1,8 +1,9 @@
-import { Component, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { Api } from '../../core/api';
+import { SyncService } from '../../core/sync';
 import { I18n, TPipe, jiraReason } from '../../core/i18n';
 import type { Project, ProjectGroup, Rag } from '../../core/models';
 import { GroupDialog } from '../../shared/group-dialog';
@@ -93,6 +94,7 @@ const NEW_GROUP = '__new__';
   `,
 })
 export class ProjectsPage {
+  private readonly sync = inject(SyncService);
   private readonly api = inject(Api);
   protected readonly i18n = inject(I18n);
   protected readonly statuses: Rag[] = ['green', 'amber', 'red', 'grey'];
@@ -162,4 +164,10 @@ export class ProjectsPage {
   }
 
   private readonly dialogRef = viewChild(GroupDialog);
+
+  constructor() {
+    effect(() => {
+      if (this.sync.completed()) this.reload();
+    });
+  }
 }

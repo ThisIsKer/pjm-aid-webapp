@@ -1,6 +1,7 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import type { DatabaseSync } from 'node:sqlite';
 import { config } from './config.ts';
+import { isoToday } from './flags.ts';
 import { toApi, toApiList } from './util.ts';
 
 /**
@@ -24,7 +25,7 @@ const isWin = process.platform === 'win32';
 
 interface Step { at: string; label: string; count: number }
 interface Job {
-  id: number; mode: SyncMode; status: 'running' | 'ok' | 'error'; startedAt: string; finishedAt?: string;
+  id: number; mode: SyncMode; origin: 'manual' | 'auto'; status: 'running' | 'ok' | 'error'; startedAt: string; finishedAt?: string;
   steps: Step[]; resultText?: string; denials: string[]; error?: string; costUsd?: number; imported?: boolean;
 }
 
@@ -62,13 +63,14 @@ function save(db: DatabaseSync, job: Job) {
     job.resultText ?? null, JSON.stringify(job.denials), job.error ?? null, job.costUsd ?? null, job.imported ? 1 : 0, job.id);
 }
 
-export function startSync(db: DatabaseSync, mode: SyncMode, lang: 'it' | 'en' = 'it'): Job {
+export function startSync(db: DatabaseSync, mode: SyncMode, lang: 'it' | 'en' = 'it', origin: 'manual' | 'auto' = 'manual'): Job {
   if (current) throw Object.assign(new Error('A sync is already running'), { status: 409 });
   if (!agentStatus().available) throw Object.assign(new Error(`Claude Code not found ("${bin()} --version" failed)`), { status: 503 });
 
   const startedAt = new Date().toISOString();
-  const id = Number(db.prepare(`INSERT INTO sync_jobs (mode, status, started_at) VALUES (?, 'running', ?)`).run(mode, startedAt).lastInsertRowid);
-  const job: Job = { id, mode, status: 'running', startedAt, steps: [], denials: [] };
+  const id = Number(db.prepare(`INSERT INTO sync_jobs (mode, origin, status, started_at) VALUES (?, ?, 'running', ?)`)
+    .run(mode, origin, startedAt).lastInsertRowid);
+  const job: Job = { id, mode, origin, status: 'running', startedAt, steps: [], denials: [] };
 
   // Prompt goes through stdin: no quoting problems with the Windows shell.
   const child = spawn(bin(), ['-p', '--output-format', 'stream-json', '--verbose', '--permission-prompts', 'none'], {
@@ -142,6 +144,23 @@ export function startSync(db: DatabaseSync, mode: SyncMode, lang: 'it' | 'en' = 
   child.on('close', (code) => finish(code));
   save(db, job);
   return job;
+}
+
+const localDay = (ts: string) => new Date(ts).toLocaleDateString('sv-SE');
+
+/**
+ * First opening of the day: start a sync unless one already ran today (any "Sync now" job, auto or manual,
+ * or a snapshot imported today, e.g. from Cowork or the scheduled task).
+ */
+export function autoSync(db: DatabaseSync, mode: SyncMode, lang: 'it' | 'en') {
+  if (current) return { started: false, reason: 'running', job: current.job };
+  const today = isoToday();
+  const jobs = db.prepare('SELECT started_at FROM sync_jobs ORDER BY id DESC LIMIT 20').all() as { started_at: string }[];
+  if (jobs.some((j) => localDay(j.started_at) === today)) return { started: false, reason: 'done', job: null };
+  const runs = db.prepare('SELECT imported_at FROM sync_runs ORDER BY id DESC LIMIT 5').all() as { imported_at: string }[];
+  if (runs.some((r) => localDay(`${r.imported_at.replace(' ', 'T')}Z`) === today)) return { started: false, reason: 'imported', job: null };
+  if (!agentStatus().available) return { started: false, reason: 'unavailable', job: null };
+  return { started: true, reason: 'started', job: startSync(db, mode, lang, 'auto') };
 }
 
 export function currentOrLastJob(db: DatabaseSync) {

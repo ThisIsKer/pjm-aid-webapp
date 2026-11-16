@@ -2,12 +2,11 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
-import { Api } from '../../core/api';
 import { I18n, TPipe, jiraReason } from '../../core/i18n';
 import type { Dashboard, DayPlan, Meeting, Project, ProjectGroup, Rag } from '../../core/models';
 import { FlagBadges } from '../../shared/flag-badges';
 import { RagDot } from '../../shared/rag-dot';
-import { SyncButton } from '../../shared/sync-button';
+import { SyncService } from '../../core/sync';
 
 const SEVERITY: Record<Rag, number> = { red: 0, amber: 1, green: 2, grey: 3 };
 const FILTER_KEY = 'pjm.dashGroup';
@@ -18,11 +17,11 @@ type ProjectRow =
 
 @Component({
   selector: 'app-dashboard',
-  imports: [DatePipe, RouterLink, RagDot, FlagBadges, SyncButton, TPipe],
+  imports: [DatePipe, RouterLink, RagDot, FlagBadges, TPipe],
   templateUrl: './dashboard.html',
 })
 export class DashboardPage {
-  private readonly api = inject(Api);
+  private readonly sync = inject(SyncService);
   protected readonly i18n = inject(I18n);
   protected readonly data = httpResource<Dashboard>(() => '/api/dashboard');
   protected readonly plan = httpResource<DayPlan>(() => '/api/today');
@@ -42,6 +41,10 @@ export class DashboardPage {
   }
 
   constructor() {
+    // reload when a sync (auto or from Settings) ends
+    effect(() => {
+      if (this.sync.completed()) this.reload();
+    });
     effect(() => {
       const v = this.groupFilter();
       try {
@@ -106,11 +109,4 @@ export class DashboardPage {
     this.groups.reload();
   }
 
-  protected async importSnapshot() {
-    const res = await this.api.importSnapshot();
-    this.syncMessage.set(res.imported
-      ? (res.warnings?.length ? this.i18n.t('dash.importedWarn', { n: res.warnings.length }) : this.i18n.t('dash.imported'))
-      : this.i18n.t('dash.nothing'));
-    this.reload();
-  }
 }

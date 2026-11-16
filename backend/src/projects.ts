@@ -20,9 +20,10 @@ export function loadDeadlines(db: DatabaseSync, where = '1 = 1', params: Record<
 
 export interface ProjectSummary {
   [key: string]: unknown;
-  docs: (DocRow & { required: boolean })[];
+  docs: (DocRow & { required: boolean; state: DocState })[];
   missingDocs: number;
   uncheckedDocs: number;
+  attentionDocs: number;
   currentPhase: { name: string; startsOn: string | null } | null;
   jiraRag: string;
   jiraRagReason: string;
@@ -61,13 +62,18 @@ export function loadProjects(db: DatabaseSync, opts: { all?: boolean; id?: strin
     const rag = jiraRag(phases);
     const upcoming = phases.map((d) => d.dueDate).filter((d): d is string => !!d && d >= today).sort();
     const cp = currentPhase(phases, today);
-    const docs = (docsByProject.get(String(p['id'])) ?? []).map((d) => ({ ...d, required: docRequired(d, cp, p['phase'] as string | null) }));
+    const folder = (p['sharepointUrl'] as string | null) ?? null;
+    const docs = (docsByProject.get(String(p['id'])) ?? []).map((d) => ({
+      ...d, required: docRequired(d, cp, p['phase'] as string | null), state: docState(d),
+      foundPath: d.foundPath ?? (d.foundUrl ? relativePath(d.foundUrl, folder) : null),
+    }));
     const due = docs.filter((d) => d.required && !d.waived);
     return {
       ...p,
       docs,
-      missingDocs: due.filter((d) => d.checkStatus === 'missing' || d.checkStatus === 'outdated').length,
-      uncheckedDocs: due.filter((d) => d.checkStatus === 'unknown').length,
+      missingDocs: due.filter((d) => d.state === 'missing').length,
+      uncheckedDocs: due.filter((d) => d.state === 'unchecked').length,
+      attentionDocs: docs.filter((d) => d.state === 'new' || d.state === 'updated').length,
       currentPhase: cp,
       jiraRag: rag.rag,
       jiraRagReason: rag.reason,
@@ -84,7 +90,38 @@ export type DocRow = {
   id: string; projectId: string; phase: string | null; requiredFrom: string | null; title: string;
   repository: string; locationHint: string | null; checkStatus: string; foundUrl: string | null;
   checkedAt: string | null; waived: boolean; fromTemplate: boolean;
+  foundPath: string | null; foundModifiedAt: string | null; confirmedAt: string | null; confirmedRef: string | null;
 };
+
+/** What the user confirmed with OK: this file at this version. */
+export const docRef = (url: string, modifiedAt: string | null) => `${url}|${modifiedAt ?? ''}`;
+
+/**
+ * Document state for the UI:
+ * ok (confirmed by the user and unchanged since) · new (found, never confirmed) · updated (changed since the OK) ·
+ * missing (not found, or only an outdated version) · unchecked (never checked) · waived ("not needed").
+ */
+export type DocState = 'ok' | 'new' | 'updated' | 'missing' | 'unchecked' | 'waived';
+export function docState(d: DocRow): DocState {
+  if (d.waived) return 'waived';
+  if (d.confirmedRef === 'manual') return 'ok';
+  if (d.checkStatus === 'present' && d.foundUrl) {
+    if (!d.confirmedRef) return 'new';
+    return d.confirmedRef === docRef(d.foundUrl, d.foundModifiedAt) ? 'ok' : 'updated';
+  }
+  if (d.checkStatus === 'present') return d.confirmedRef ? 'ok' : 'new';
+  if (d.checkStatus === 'missing' || d.checkStatus === 'outdated') return 'missing';
+  return 'unchecked';
+}
+
+/** Path of a found file below the project folder ("3. Analisi/Analisi v2.docx"), for display. */
+export function relativePath(url: string, folderUrl: string | null): string {
+  const dec = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
+  const u = dec(url).replace(/\/+$/, '');
+  const f = folderUrl ? dec(folderUrl).replace(/\/+$/, '') : null;
+  if (f && u.toLowerCase().startsWith(`${f.toLowerCase()}/`)) return u.slice(f.length + 1);
+  return u.split('/').slice(-2).join('/');
+}
 
 export const getProjectRow = (db: DatabaseSync, id: string) => {
   const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);

@@ -1,16 +1,6 @@
 <div class="dash">
   <header class="page-head">
     <h1>{{ 'dash.title' | t }}</h1>
-    <div class="meta">
-      @if (data.value()?.lastSync; as s) {
-        <span>{{ 'dash.lastSync' | t: { d: (s.generatedAt | date: 'dd/MM HH:mm' : undefined : i18n.locale()) } }}</span>
-      } @else {
-        <span>{{ 'dash.noSync' | t }}</span>
-      }
-      @if (syncMessage(); as m) { <span>· {{ m }}</span> }
-      <button (click)="importSnapshot()">{{ 'dash.import' | t }}</button>
-      <app-sync-button (finished)="reload()" />
-    </div>
   </header>
 
   @if (data.error()) {
@@ -24,7 +14,7 @@
       <div class="kpi" [class.warn]="d.kpis.atRisk > 0"><div class="value">{{ d.kpis.atRisk }}</div><div class="label">{{ 'kpi.atRisk' | t }}</div></div>
       <a class="kpi" routerLink="/mail" [class.alert]="d.kpis.needsReply > 0"><div class="value">{{ d.kpis.needsReply }}</div><div class="label">{{ 'kpi.mail' | t }}</div></a>
       <a class="kpi" routerLink="/docs" [class.alert]="d.kpis.missingDocs > 0"><div class="value">{{ d.kpis.missingDocs }}</div>
-        <div class="label">{{ 'kpi.docs' | t }}@if (d.kpis.uncheckedDocs) { · {{ 'kpi.unchecked' | t: { n: d.kpis.uncheckedDocs } }} }</div></a>
+        <div class="label">{{ 'kpi.docs' | t }}@if (d.kpis.attentionDocs) { · <span class="amber-text">{{ 'kpi.attention' | t: { n: d.kpis.attentionDocs } }}</span> }</div></a>
     </section>
   }
 

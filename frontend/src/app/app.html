@@ -14,8 +14,12 @@
         <a [routerLink]="item.path" routerLinkActive="active">{{ item.label | t }}</a>
       }
     </nav>
+    @if (sync.running() && !sync.overlay()) {
+      <button class="sync-indicator" (click)="sync.overlay.set(true)"><span class="spinner" aria-hidden="true"></span>{{ 'nav.syncing' | t }}</button>
+    }
   </aside>
   <main class="content">
     <router-outlet />
   </main>
+  <app-sync-overlay />
 </div>

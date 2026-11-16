@@ -127,28 +127,43 @@ weekend from today through Monday. `outlook_calendar_search` with `query: "*"`, 
 
 ## 3. Documentation (docs mode only) → `docs.json`, `folders.json`
 
-For each **active** registry project with docs where `required && !waived && checkStatus != "present"`:
+Check **every active registry project** and **every checklist item that is not waived** (required or not yet
+required, present or not): the app shows where each document is and flags files that are new or were changed
+since Sebastiano confirmed them, so present documents must be re-reported every time with their current version.
 
-1. Project folder: use `sharepointFolderUri` if known. Otherwise find it: DDM's standard layout is
-   `Delivery/Progetti Clienti/<Client>/<Year>/<Project folder>` on the DDMSOLUTIONS site —
-   `sharepoint_folder_search` with the client name, pick the folder whose name matches the epic topic
-   (e.g. "Mevis - FE Slovacchia" for "Mevis - FEI Slovacchia"; "FEI DE" under Fedrigoni/2026). Path URIs work with
-   `read_resource`: `file:///<driveId>/Delivery/Progetti Clienti/<Client>/<Year>/<Folder>`. Record new folders in
-   `folders.json` as `{"projectId","folderUri","webUrl"}` (webUrl with spaces encoded as %20). Not found → leave the
-   docs `unknown` and mention it.
-2. List the project folder (`read_resource`). Standard subfolders: 0. Offerta · 1. Avvio · 2. Pianificazione ·
-   3. Analisi · 4. Implementazione · 5. UAT · 6. Cutover - Live · 7. Post Golive - Chiusura · 8. CR Extra ·
-   99. Project documents / File condivisi col cliente (shared with the customer; subfolders such as Analisi,
-   Requirements Gathering, UAT, Kickoff). Listings show folder sizes: **skip 0-byte folders**, open only the
-   subfolders relevant to the missing docs (use each doc's `locationHint`), at most ~4 listings per project.
-3. Decide per required doc: `present` (a matching file exists — e.g. analysis ≈ "Analisi", "Requirements
-   Gathering", "Raccolta requisiti"; Open Topics Log ≈ "Open Topics", "Open Point"; system test ≈ "Internal
-   testing", "Test interni"; UAT testbook ≈ "Testbook"; UAT sign-off ≈ "Verbale collaudo/UAT"; cutover ≈
-   "cutover"), `outdated` (exists but clearly a superseded/old version only), `missing` (folder checked, nothing
-   matching). Confluence docs (`repository: confluence`): `searchConfluenceUsingCql` with the topic
-   (e.g. `title ~ "FEI Slovacchia" AND type = page`) — present if a product page was updated in the project period.
-4. Write `docs.json`: `[{"requirementId","status","foundUrl"}]` — `foundUrl` = browser URL of the file
-   (folder webUrl + "/" + subfolder + "/" + file name, spaces as %20).
+1. **Project folder — always DDM's standard layout** on the DDMSOLUTIONS site:
+   `Delivery/Progetti Clienti/<Client>/<Year>/<Project folder>`.
+   - Client folder: `sharepoint_folder_search` with the client name (text before " - " in the project name);
+     keep only results whose webUrl contains `/Delivery/Progetti Clienti/<Client>/`.
+   - Year: the year of the project start (Jira epic `startDate`, else the earliest phase start); if the project
+     folder is not under that year, try the following year, then the previous one.
+   - Project folder: the folder under that year whose name matches the epic topic (e.g. "Mevis - FE Slovacchia"
+     for "Mevis - FEI Slovacchia"; "FEI DE" under Fedrigoni/2026). Use the registry's `sharepointFolderUri` /
+     `sharepointUrl` when already known and still under `Delivery/Progetti Clienti`.
+   - Always write the folder to `folders.json` as `{"projectId","folderUri","webUrl"}` (webUrl exactly as returned,
+     spaces encoded as %20). Not found → report the project's items as `unknown` and say so in the report.
+2. **List all files of the project folder with one search** (no folder-by-folder listing):
+   `sharepoint_search` with `query: "*"`, `folderName: "<project folder name>"`, `limit: 50` (follow `nextOffset`
+   while there are more). Keep only results whose `webUrl` starts with the project folder's webUrl. Each result
+   gives `name`, `webUrl` (full path) and `lastModifiedDateTime`. If the search returns nothing although the folder
+   has content, fall back to `read_resource` listings of the non-empty subfolders (skip 0-byte folders; at most ~6).
+   Standard subfolders: 0. Offerta · 1. Avvio · 2. Pianificazione · 3. Analisi · 4. Implementazione · 5. UAT ·
+   6. Cutover - Live · 7. Post Golive - Chiusura · 8. CR Extra · 99. Project documents [SHARED WITH CUSTOMER]
+   (subfolders such as Kickoff, Planning, Process Mapping, Requirements Gathering, UAT).
+3. **Match each checklist item** to a file (use the item's `locationHint` and phase): analysis ≈ "Analisi",
+   "Requirements Gathering", "Raccolta requisiti"; Open Topics Log ≈ "Open Topics", "Open Point"; system test ≈
+   "Internal testing", "Test interni", "System test"; UAT testbook ≈ "Testbook"; UAT sign-off ≈ "Verbale
+   collaudo/UAT"; cutover ≈ "cutover", "go-live plan". Several candidates → the most recently modified one.
+   - `present` — a matching file exists: report `foundUrl` (the file's webUrl, spaces as %20), `foundPath` (path
+     below the project folder, e.g. `99. Project documents [SHARED WITH CUSTOMER]/Requirements Gathering/MEVIS_Requirements_Gathering_Slovakia_EN.docx`)
+     and `modifiedAt` (the file's `lastModifiedDateTime`). Always report the current values, also for files
+     found in earlier runs: a newer `modifiedAt` is how the app detects an updated document.
+   - `missing` — the folder was searched and nothing matches.
+   - Confluence items (`repository: confluence`): `searchConfluenceUsingCql` with the topic
+     (e.g. `title ~ "FEI Slovacchia" AND type = page`) — `present` with the page URL and its last-modified date
+     if a product page was updated in the project period, otherwise `missing`.
+4. Write `docs.json`: `[{"requirementId","status","foundUrl","foundPath","modifiedAt"}]` (`foundUrl`, `foundPath`,
+   `modifiedAt` only for `present`).
 
 ## 4. Build and deliver
 

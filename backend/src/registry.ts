@@ -20,7 +20,8 @@ export function exportRegistry(db: DatabaseSync): void {
       confluenceSpace: p['confluenceSpace'], mailKeywords: p['mailKeywords'], mailDomains: p['mailDomains'],
       docs: p.docs.map((d) => ({
         id: d.id, title: d.title, phase: d.phase, repository: d.repository, locationHint: d.locationHint,
-        required: d.required, waived: d.waived, checkStatus: d.checkStatus, foundUrl: d.foundUrl, checkedAt: d.checkedAt,
+        required: d.required, waived: d.waived, checkStatus: d.checkStatus, state: d.state, foundUrl: d.foundUrl,
+        foundModifiedAt: d.foundModifiedAt, checkedAt: d.checkedAt,
       })),
     }));
     const openMail = toApiList(db.prepare(`SELECT id, project_id, subject, counterpart, category, last_message_at, last_from_me,

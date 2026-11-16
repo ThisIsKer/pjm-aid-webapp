@@ -30,6 +30,7 @@ export interface Project {
   needsReply: number;
   missingDocs: number;
   uncheckedDocs: number;
+  attentionDocs: number;
   sharepointFolderUri: string | null;
   groupId: number | null;
   groupName: string | null;
@@ -109,13 +110,21 @@ export interface DocRequirement {
   locationHint: string | null;
   requiredFrom: string | null;
   checkStatus: 'missing' | 'present' | 'outdated' | 'unknown';
+  state: DocState;
   foundUrl: string | null;
+  foundPath: string | null;
+  foundModifiedAt: string | null;
+  confirmedAt: string | null;
   checkedAt: string | null;
   waived: boolean;
   required: boolean;
   projectPhase?: string | null;
   projectFolderUrl?: string | null;
+  projectClient?: string | null;
 }
+
+/** ok = confirmed by you · new = found, not confirmed yet · updated = changed after your OK · missing · unchecked · waived */
+export type DocState = 'ok' | 'new' | 'updated' | 'missing' | 'unchecked' | 'waived';
 
 export interface SyncRun {
   id: number;
@@ -128,7 +137,7 @@ export interface SyncRun {
 export interface Dashboard {
   today: string;
   horizon: string;
-  kpis: { activeProjects: number; overdue: number; atRisk: number; dueSoon: number; needsReply: number; missingDocs: number; uncheckedDocs: number };
+  kpis: { activeProjects: number; overdue: number; atRisk: number; dueSoon: number; needsReply: number; missingDocs: number; uncheckedDocs: number; attentionDocs: number };
   projects: Project[];
   deadlines: Deadline[];
   lastSync: SyncRun | null;
@@ -147,6 +156,7 @@ export interface SyncStep { at: string; label: string; count: number }
 export interface SyncJob {
   id: number;
   mode: 'daily' | 'docs' | 'jira';
+  origin?: 'manual' | 'auto';
   status: 'running' | 'ok' | 'error';
   startedAt: string;
   finishedAt?: string | null;

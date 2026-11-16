@@ -3,6 +3,8 @@ import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { Api } from '../../core/api';
+import { SyncService } from '../../core/sync';
+import { DocLocation, DocStateBadge } from '../../shared/doc-cells';
 import { I18n, TPipe, jiraReason } from '../../core/i18n';
 import { AddDocDialog } from '../../shared/add-doc-dialog';
 import type { Deadline, DocRequirement, MailThread, ProjectDetail, Rag } from '../../core/models';
@@ -11,10 +13,11 @@ import { RagDot } from '../../shared/rag-dot';
 
 @Component({
   selector: 'app-project-detail',
-  imports: [DatePipe, RouterLink, FlagBadges, RagDot, TPipe, AddDocDialog],
+  imports: [DatePipe, RouterLink, FlagBadges, RagDot, TPipe, AddDocDialog, DocLocation, DocStateBadge],
   templateUrl: './project-detail.html',
 })
 export class ProjectDetailPage {
+  private readonly sync = inject(SyncService);
   private readonly api = inject(Api);
   protected readonly i18n = inject(I18n);
   /** Route parameter (component input binding). */
@@ -38,6 +41,9 @@ export class ProjectDetailPage {
   protected readonly openMail = computed(() => (this.project.value()?.mailThreads ?? []).filter((m) => m.userState !== 'done'));
 
   constructor() {
+    effect(() => {
+      if (this.sync.completed()) this.project.reload();
+    });
     effect(() => {
       const p = this.project.value();
       if (!p) return;
@@ -82,6 +88,11 @@ export class ProjectDetailPage {
 
   protected async mailDone(m: MailThread) {
     await this.api.updateMail(m.id, { userState: 'done' });
+    this.project.reload();
+  }
+
+  protected async toggleOk(r: DocRequirement) {
+    await this.api.updateDoc(r.id, { confirmed: r.state !== 'ok' });
     this.project.reload();
   }
 

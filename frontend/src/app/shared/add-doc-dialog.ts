@@ -83,8 +83,9 @@ export class AddDocDialog {
   protected readonly error = signal<string | null>(null);
   protected readonly saving = signal(false);
 
-  open() {
+  open(projectId?: string) {
     this.reset();
+    if (projectId) this.project.set(projectId);
     this.dlg().nativeElement.showModal();
   }
 

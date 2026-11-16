@@ -1,7 +1,8 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Api } from '../../core/api';
+import { SyncService } from '../../core/sync';
 import { I18n, TPipe } from '../../core/i18n';
 import type { MailCategory, MailThread } from '../../core/models';
 
@@ -43,6 +44,7 @@ import type { MailCategory, MailThread } from '../../core/models';
   `,
 })
 export class MailPage {
+  private readonly sync = inject(SyncService);
   private readonly api = inject(Api);
   protected readonly i18n = inject(I18n);
   protected readonly categories: MailCategory[] = ['needs_reply', 'waiting', 'fyi'];
@@ -59,5 +61,11 @@ export class MailPage {
     until.setDate(until.getDate() + days);
     await this.api.updateMail(m.id, { userState: 'snoozed', snoozedUntil: until.toLocaleDateString('sv-SE') });
     this.threads.reload();
+  }
+
+  constructor() {
+    effect(() => {
+      if (this.sync.completed()) this.threads.reload();
+    });
   }
 }

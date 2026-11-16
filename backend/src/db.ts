@@ -196,6 +196,13 @@ const MIGRATIONS: string[] = [
   );
   ALTER TABLE projects ADD COLUMN group_id INTEGER REFERENCES project_groups(id) ON DELETE SET NULL;
   `,
+  /* v7 — daily auto-sync origin; document confirmation (OK) and change detection */ `
+  ALTER TABLE sync_jobs ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual';
+  ALTER TABLE doc_requirements ADD COLUMN found_path TEXT;
+  ALTER TABLE doc_requirements ADD COLUMN found_modified_at TEXT;
+  ALTER TABLE doc_requirements ADD COLUMN confirmed_at TEXT;
+  ALTER TABLE doc_requirements ADD COLUMN confirmed_ref TEXT;
+  `,
 ];
 
 export function openDb(file: string): DatabaseSync {

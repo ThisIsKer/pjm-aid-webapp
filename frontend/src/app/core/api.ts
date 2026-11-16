@@ -21,7 +21,7 @@ export class Api {
     return firstValueFrom(this.http.post<DocRequirement>(`/api/projects/${encodeURIComponent(projectId)}/docs`, body));
   }
 
-  updateDoc(id: string, body: Partial<Pick<DocRequirement, 'waived' | 'locationHint' | 'phase'>>) {
+  updateDoc(id: string, body: Partial<Pick<DocRequirement, 'waived' | 'locationHint' | 'phase'>> & { confirmed?: boolean }) {
     return firstValueFrom(this.http.patch<DocRequirement>(`/api/docs/${id}`, body));
   }
 
@@ -51,6 +51,11 @@ export class Api {
 
   startSync(mode: SyncJob['mode'], lang: 'it' | 'en') {
     return firstValueFrom(this.http.post<SyncJob>('/api/sync/run', { mode, lang }));
+  }
+
+  /** First opening of the day: the backend starts a sync unless one already ran today. */
+  autoSync(mode: SyncJob['mode'], lang: 'it' | 'en') {
+    return firstValueFrom(this.http.post<{ started: boolean; reason: string; job: SyncJob | null }>('/api/sync/auto', { mode, lang }));
   }
 
   currentSyncJob() {

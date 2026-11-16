@@ -15,7 +15,7 @@
  *
  * --mail, --docs, --folders are written by Claude (judgement calls) and merged as-is after validation:
  *   mail.json    [{subject, projectId?, counterpart, lastMessageAt, lastFromMe, category, urgency, summary, webLink}]
- *   docs.json    [{requirementId, status: missing|present|outdated|unknown, foundUrl?, checkedAt?}]
+ *   docs.json    [{requirementId, status: missing|present|outdated|unknown, foundUrl?, foundPath?, modifiedAt?, checkedAt?}]
  *   folders.json [{projectId, folderUri, webUrl}]
  * --calendar takes raw Microsoft 365 `outlook_calendar_search` results (saved tool output, possibly several JSON
  * objects back to back) or compact rows [{id, subject, start, end, isAllDay, location, organizer, organizerName,
@@ -194,7 +194,8 @@ for (const m of readJson('mail')) {
 const docChecks = readJson('docs').map((d) => ({
   requirementId: String(d.requirementId),
   status: oneOf(d.status, ['missing', 'present', 'outdated', 'unknown'], `doc ${d.requirementId} status`),
-  foundUrl: d.foundUrl ?? undefined, checkedAt: d.checkedAt ?? undefined,
+  foundUrl: d.foundUrl ?? undefined, foundPath: d.foundPath ?? undefined, modifiedAt: d.modifiedAt ?? d.lastModifiedDateTime ?? undefined,
+  checkedAt: d.checkedAt ?? undefined,
 }));
 const projectFolders = readJson('folders').map((f) => ({ projectId: String(f.projectId), folderUri: String(f.folderUri), webUrl: f.webUrl }));
 

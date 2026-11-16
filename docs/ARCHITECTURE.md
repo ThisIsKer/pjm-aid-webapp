@@ -65,7 +65,15 @@ epic) become **contributor** projects. In the Projects page he can:
   group filter. Deleting a group leaves its projects ungrouped.
 
 The dashboard fits the window: KPIs on top and four panels (today's activities, today's meetings, projects,
-deadlines), each with its own scrollbar — the page itself never scrolls.
+deadlines), each with its own scrollbar — the page itself never scrolls. Sync controls (last sync, Sync now with its
+scope, import snapshot, daily auto-sync) live in **Settings**.
+
+**Daily auto-sync.** At the first opening of the day the app calls `POST /api/sync/auto`; the backend starts a
+"Sync now" (origin `auto`) unless a sync job already started today or a snapshot was imported today (e.g. from
+Cowork). Scope: Jira + mail + calendar, plus documentation on Mondays (both switchable in Settings, kept in the
+browser). While it runs, a blocking layer shows the same step list as Settings; it can be closed (the sync goes
+on, a "Sync running…" chip stays in the sidebar) and closes by itself when the sync ends well. Every page reloads
+its data when a sync ends (`SyncService.completed`).
 
 A project created from Jira is hidden automatically when none of its epics is reported open anymore.
 `data/seed.json` is now only needed for the documentation checklist template and for non-Jira projects.
@@ -98,7 +106,7 @@ Every field has exactly one owner, so a Claude sync never overwrites a decision 
 | Jira epic | which project it belongs to | summary, status, dates, assignee, mine, active |
 | Deadline | manual deadlines | Jira phases (dates, estimates, assignee, status, open sub-tasks) |
 | Mail thread | `userState` (open/done/snoozed), `snoozedUntil`, project re-assignment | subject, counterpart, category, urgency, summary, link, last message |
-| Doc requirement | the checklist (template + per project), `waived` | `checkStatus`, `foundUrl`, `checkedAt` |
+| Doc requirement | the checklist (template + per project), `waived`, **OK** (`confirmedAt`, `confirmedRef`) | `checkStatus`, `foundUrl`, `foundPath`, `foundModifiedAt`, `checkedAt` |
 
 Rules applied on import:
 
@@ -124,10 +132,20 @@ against Sent Items, so a thread you answered moves to *waiting*.
 aligned on every project (items added/removed; check results and waivers kept). Each item has the phase that
 produces it and `requiredFrom` (default: the next phase), so a document only counts as a gap once the project —
 by its Jira current phase — has reached that point. `clientMatch` limits items (e.g. product documentation in
-Confluence only for "Tecnica" epics). Claude checks the DDM standard SharePoint layout
-(`Delivery/Progetti Clienti/<Client>/<Year>/<Project>` with 0–8 phase folders and 99 "shared with customer"),
-skipping empty folders, and Confluence for product pages. Doc checks are heavier, so they run on request
-("sync PJM docs") or weekly; results are sticky until the next check.
+Confluence only for "Tecnica" epics). Claude always looks in the DDM standard SharePoint layout
+`Delivery/Progetti Clienti/<Client>/<Year>/<Project>` (year = project start; 0–8 phase folders and
+99 "shared with customer"): one `sharepoint_search` per project folder lists every file with its path and last
+change; each non-waived checklist item is reported `present` (link, path below the project folder, `modifiedAt`)
+or `missing`, and Confluence for product pages. Doc checks are heavier, so they run with the docs scope (on
+request, or the Monday auto-sync); results are sticky until the next check.
+
+**Document states** (`docState` in `projects.ts`): **ok** = you pressed OK and the file is unchanged since
+(`confirmedRef` = file URL + `modifiedAt` at that moment; OK on a document Claude can't find = "present elsewhere",
+always ok) · **new** = found, never confirmed · **updated** = a different file or a newer `modifiedAt` than the one
+you confirmed · **missing** · **unchecked** · **waived** ("Not needed"). Red counters = missing documents that are
+due; yellow = new + updated. The Documentation page shows one square tile per project with the two counters;
+a tile opens the checklist with "Where" (file link, sub-folder, last change — or the project folder and the expected
+sub-folder), state, and the **Ok** / **Not needed** buttons (same cells on the project page).
 
 Default checklist (edit freely): Documento di analisi · Open Topics Log · Verbale system test · Testbook UAT ·
 Verbale di collaudo UAT · Piano di cutover / go-live · Documentazione di prodotto aggiornata (Confluence, Tecnica only).
@@ -147,12 +165,12 @@ grey → n/a.
 stages it to know projects, current phases, SharePoint folders, the checklist with `required` flags, open mail
 threads and the last sync time.
 
-## 6. Database schema (v6)
+## 6. Database schema (v7)
 
 `projects` · `project_groups` · `jira_epics` · `deadlines` (+ view `v_deadlines` resolving each phase's project through its epic) ·
 `mail_threads` · `calendar_events` · `doc_requirements` · `doc_template` · `sync_runs` · `sync_jobs` — see `backend/src/db.ts`.
 Migrations are append-only and tracked with `PRAGMA user_version` (v3 adds `projects.sharepoint_folder_uri`,
-`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`). Requirement id = `<projectId>--<slug(title)>`, which is the id
+`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`). Requirement id = `<projectId>--<slug(title)>`, which is the id
 Claude reports back in `docChecks`.
 
 ## 7. Snapshot contract v2 (`data/inbox/snapshot.json`)
@@ -178,7 +196,8 @@ Written by the `pjm-sync` skill through `tools/build-snapshot.ts`; the backend w
   "calendar":    { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD (exclusive)", "events": [{ "id", "subject", "start", "end",
                    "isAllDay", "location", "onlineUrl", "organizer", "organizerName", "attendees", "showAs",
                    "isCancelled", "isOrganizer", "webLink" }] },   // replaces the app's events in the range
-  "docChecks":   [{ "requirementId", "status": "missing|present|outdated|unknown", "foundUrl?", "checkedAt?" }]
+  "docChecks":   [{ "requirementId", "status": "missing|present|outdated|unknown", "foundUrl?", "foundPath?",
+                    "modifiedAt?", "checkedAt?" }]          // present items carry the file's current version
 }
 ```
 
@@ -201,13 +220,14 @@ Full example: `docs/examples/snapshot.example.json`.
 | GET | `/mail?category=needs_reply&state=all` | triage list (snoozed items return when due) |
 | PATCH | `/mail/:id` | done / snooze / re-assign project |
 | GET | `/today?date=` | day plan: activities with hours for the day, meetings, load |
-| GET | `/docs?all=true` | documentation gaps due now (default) or the full checklist with `required` flags |
+| GET | `/docs?all=true` | documents needing attention (default: missing and due, new, updated) or the full checklist with `required` and `state` |
 | POST | `/projects/:id/docs` | add a document `{ title, repository, phase?, requiredFrom?, locationHint?, foundUrl? }` (a link marks it present) |
-| PATCH | `/docs/:id` | waive ("not needed") / edit hint |
+| PATCH | `/docs/:id` | `{ confirmed }` OK / remove OK · `{ waived }` not needed · edit hint |
 | POST | `/sync/import?force=true` | import the snapshot now |
 | GET | `/sync/runs` | last 20 imports with counts and warnings |
 | GET | `/sync/agent?refresh=true` | is Claude Code available (`claude --version`) |
 | POST | `/sync/run` | `{ mode: daily \| docs \| jira, lang: it \| en }` — start "Sync now" (409 if one is running) |
+| POST | `/sync/auto` | `{ mode, lang }` — first opening of the day: starts a sync unless one already ran today → `{ started, reason, job }` |
 | GET | `/sync/jobs/current` · `/sync/jobs` | running or last job (steps, result text, denied tools) · last 10 |
 
 ## 9. Claude integration
@@ -219,7 +239,7 @@ Full example: `docs/examples/snapshot.example.json`.
      scheduled task.
    - **Local Claude Code** in the repo folder: reads `data/registry.json` directly, keeps working files in
      `data/work/`, runs `node tools/build-snapshot.ts … --out data/inbox/snapshot.json` (atomic write).
-2. **"Sync now" button** (`backend/src/agent.ts`) — the backend runs Claude Code headless in the repo folder:
+2. **"Sync now"** (Settings, and the daily auto-sync; `backend/src/agent.ts`) — the backend runs Claude Code headless in the repo folder:
    `claude -p --output-format stream-json --verbose --permission-prompts none`, prompt on stdin
    ("Run the pjm-sync skill in local mode … Jira and mail / full sync with docs / Jira only"). Claude Code uses the
    claude.ai Team login and its connectors (checked: Atlassian Rovo and Microsoft 365 connected, v2.1.318).
@@ -233,7 +253,7 @@ Full example: `docs/examples/snapshot.example.json`.
 3. **MCP server** (`backend/src/mcp.ts`, stdio, talks to the running backend's REST API so the backend stays the
    only writer). Tools: `pjm_dashboard`, `pjm_list_projects`, `pjm_get_project` (id, epic key or name),
    `pjm_today`, `pjm_list_mail`, `pjm_update_mail` (done / snooze / reopen / assign), `pjm_doc_gaps`, `pjm_update_project`
-   (status, PM note, phase override, SharePoint link, hide/show, custom group — created if missing), `pjm_add_deadline`, `pjm_waive_doc`,
+   (status, PM note, phase override, SharePoint link, hide/show, custom group — created if missing), `pjm_add_deadline`, `pjm_waive_doc`, `pjm_confirm_doc`,
    `pjm_sync_status`. Register it in Claude Code with
    `claude mcp add pjm-aid --scope user -- node <repo>\backend\src\mcp.ts`, and in the Claude desktop app
    (so Cowork sessions linked to the laptop see it) under `mcpServers` in `claude_desktop_config.json`.
@@ -251,4 +271,5 @@ Full example: `docs/examples/snapshot.example.json`.
 | 4 | "Sync now" via Claude Code; MCP server; project detail page with editing (status, phase, note, SharePoint, manual deadlines, mail, docs) | ✅ |
 | 4b | Today's activities and meetings (calendar sync), Italian/English UI, status labels Critical/Warning/Ok, add-document dialog | ✅ |
 | 4c | Dark theme + Settings page, no-scroll dashboard with per-panel scrollbars, custom project groups | ✅ |
+| 4d | Daily auto-sync with progress layer; sync controls in Settings; documentation tiles, file links from the client/year SharePoint folder, OK confirmation and new/updated detection | ✅ |
 | 5 | Weekday-morning scheduled sync (daily Jira + mail + calendar, Monday + docs) | at the end |

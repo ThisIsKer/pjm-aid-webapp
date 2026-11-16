@@ -23,7 +23,7 @@ npm start            # http://localhost:4310
 
 ## Your data
 
-- Projects are created from your **Jira epics** by Claude's `pjm-sync` skill — ask Claude "sync PJM" (Jira + mail) or "sync PJM docs" (+ SharePoint/Confluence checks). On the Projects page you can merge epics, put projects into your own groups, or hide them. Language and light/dark theme are in Settings (gear icon).
+- Projects are created from your **Jira epics** by Claude's `pjm-sync` skill — ask Claude "sync PJM" (Jira + mail) or "sync PJM docs" (+ SharePoint/Confluence checks). On the Projects page you can merge epics, put projects into your own groups, or hide them. Settings (gear icon) has Sync now, import snapshot, the daily auto-sync (first opening of the day), language and light/dark theme.
 - `data/seed.json` — documentation checklist template (re-read at every start) and any non-Jira projects (git-ignored).
 - `data/registry.json` — written by the app for Claude (projects, checklist, open mails, last sync).
 - `data/inbox/snapshot.json` — written by `pjm-sync`; the backend imports it automatically within a few seconds.
@@ -34,7 +34,7 @@ To try the UI with demo data, use `data/seed.example.json` as `data/seed.json` a
 
 ## Claude integration
 
-- **Sync now** (dashboard): runs the `pjm-sync` skill through Claude Code in this folder (needs Claude Code installed
+- **Sync now** (Settings, and automatically at the first opening of the day): runs the `pjm-sync` skill through Claude Code in this folder (needs Claude Code installed
   and signed in with your claude.ai account). Choose *Jira + mail*, *Jira + mail + docs* or *Jira only*; progress and
   Claude's summary appear under the button. Allowed tools: `.claude/settings.json`.
 - **From any Claude chat**: "sync PJM" / "sync PJM docs" in Cowork, or `claude` in this folder.

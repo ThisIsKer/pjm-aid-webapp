@@ -1,9 +1,9 @@
 import { Router, type Request, type Response } from 'express';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
-import { agentStatus, currentOrLastJob, recentJobs, startSync, type SyncMode } from './agent.ts';
+import { agentStatus, currentOrLastJob, recentJobs, startSync, type SyncMode, autoSync } from './agent.ts';
 import { config } from './config.ts';
 import { addDays, isoToday } from './flags.ts';
-import { ACTIVE_MAIL, getProjectRow, loadDeadlines, loadProjects } from './projects.ts';
+import { ACTIVE_MAIL, getProjectRow, loadDeadlines, loadProjects, docRef } from './projects.ts';
 import { applyDocTemplate } from './seed.ts';
 import { dayPlan } from './today.ts';
 import { importSnapshotIfPresent } from './snapshot.ts';
@@ -73,6 +73,7 @@ export function apiRouter(db: DatabaseSync): Router {
         needsReply: count(`SELECT COUNT(*) AS n FROM mail_threads m WHERE m.category = 'needs_reply' AND ${ACTIVE_MAIL}`, { today }),
         missingDocs: projects.reduce((n, p) => n + p.missingDocs, 0),
         uncheckedDocs: projects.reduce((n, p) => n + p.uncheckedDocs, 0),
+        attentionDocs: projects.reduce((n, p) => n + p.attentionDocs, 0),
       },
       projects: projects.map(({ docs: _docs, ...p }) => p),
       deadlines,
@@ -215,10 +216,10 @@ export function apiRouter(db: DatabaseSync): Router {
   r.get('/docs', (req, res) => {
     const all = req.query['all'] === 'true';
     const rows = loadProjects(db).flatMap((p) => p.docs.map((d) => ({
-      ...d, projectName: p['name'], projectPhase: p.currentPhase?.name ?? p['phase'] ?? null,
+      ...d, projectName: p['name'], projectClient: p['client'] ?? null, projectPhase: p.currentPhase?.name ?? p['phase'] ?? null,
       projectFolderUrl: p['sharepointUrl'] ?? null,
     })));
-    res.json(all ? rows : rows.filter((d) => d.required && !d.waived && d.checkStatus !== 'present'));
+    res.json(all ? rows : rows.filter((d) => d.state === 'missing' && d.required || d.state === 'new' || d.state === 'updated'));
   });
 
   r.post('/projects/:id/docs', (req, res) => {
@@ -235,10 +236,23 @@ export function apiRouter(db: DatabaseSync): Router {
         check_status, found_url, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(id, projectId, b.phase || null, b.requiredFrom || null, b.title.trim(), b.repository!, b.locationHint?.trim() || null,
         found ? 'present' : 'unknown', found, found ? new Date().toISOString() : null);
+    if (found) db.prepare('UPDATE doc_requirements SET confirmed_at = ?, confirmed_ref = ? WHERE id = ?').run(new Date().toISOString(), docRef(found, null), id);
     res.status(201).json(toApi(db.prepare('SELECT * FROM doc_requirements WHERE id = ?').get(id)));
   });
 
   r.patch('/docs/:id', (req, res) => {
+    const body = req.body as Record<string, unknown>;
+    if (typeof body['confirmed'] === 'boolean') {
+      // OK = "the document is there and fine" (for the current version of the file, or by hand when not found)
+      const row = db.prepare('SELECT check_status, found_url, found_modified_at FROM doc_requirements WHERE id = ?').get(param(req, 'id')) as
+        { check_status: string; found_url: string | null; found_modified_at: string | null } | undefined;
+      if (!row) return notFound(res);
+      const ref = row.check_status === 'present' && row.found_url ? docRef(row.found_url, row.found_modified_at) : 'manual';
+      db.prepare(`UPDATE doc_requirements SET confirmed_at = ?, confirmed_ref = ?, updated_at = datetime('now') WHERE id = ?`)
+        .run(body['confirmed'] ? new Date().toISOString() : null, body['confirmed'] ? ref : null, param(req, 'id'));
+      delete body['confirmed'];
+      if (!Object.keys(body).length) return res.json(toApi(db.prepare('SELECT * FROM doc_requirements WHERE id = ?').get(param(req, 'id'))));
+    }
     const changes = patch(db, 'doc_requirements', param(req, 'id'), req.body as Record<string, unknown>, {
       waived: { col: 'waived', bool: true }, locationHint: { col: 'location_hint' }, foundUrl: { col: 'found_url' },
     });
@@ -264,6 +278,16 @@ export function apiRouter(db: DatabaseSync): Router {
     } catch (err) {
       const e = err as Error & { status?: number };
       res.status(e.status ?? 500).json({ error: e.message });
+    }
+  });
+
+  r.post('/sync/auto', (req, res) => {
+    const body = req.body as { mode?: string; lang?: string };
+    const mode = (['daily', 'docs', 'jira'].includes(String(body.mode)) ? body.mode : 'daily') as SyncMode;
+    try {
+      res.json(autoSync(db, mode, body.lang === 'en' ? 'en' : 'it'));
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
     }
   });
 

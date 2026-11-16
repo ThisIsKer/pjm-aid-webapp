@@ -47,7 +47,8 @@ export interface SnapshotV2 {
       showAs?: string | null; isCancelled?: boolean; isOrganizer?: boolean; webLink?: string | null;
     }[];
   };
-  docChecks?: { requirementId: string; status: 'missing' | 'present' | 'outdated' | 'unknown'; foundUrl?: string; checkedAt?: string }[];
+  docChecks?: { requirementId: string; status: 'missing' | 'present' | 'outdated' | 'unknown'; foundUrl?: string; foundPath?: string;
+    modifiedAt?: string; checkedAt?: string }[];
 }
 
 export interface ImportResult {
@@ -192,9 +193,12 @@ export function importSnapshot(db: DatabaseSync, snap: SnapshotV2, hash: string 
 
     // ---------- Documentation checks ----------
     const updDoc = db.prepare(`
-      UPDATE doc_requirements SET check_status = ?, found_url = ?, checked_at = ?, updated_at = datetime('now') WHERE id = ?`);
+      UPDATE doc_requirements SET check_status = ?, found_url = ?, found_path = ?, found_modified_at = ?, checked_at = ?,
+        updated_at = datetime('now') WHERE id = ?`);
     for (const c of snap.docChecks ?? []) {
-      if (Number(updDoc.run(c.status, c.foundUrl ?? null, c.checkedAt ?? snap.generatedAt, c.requirementId).changes)) counts.docChecks++;
+      const present = c.status === 'present' || c.status === 'outdated';
+      if (Number(updDoc.run(c.status, present ? c.foundUrl ?? null : null, present ? c.foundPath ?? null : null,
+        present ? c.modifiedAt ?? null : null, c.checkedAt ?? snap.generatedAt, c.requirementId).changes)) counts.docChecks++;
       else warnings.push(`docCheck: unknown requirement "${c.requirementId}"`);
     }
 
