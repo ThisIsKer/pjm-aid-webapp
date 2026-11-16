@@ -7,6 +7,9 @@ type Dict = Record<string, string>;
 const IT: Dict = {
   'nav.dashboard': 'Dashboard', 'nav.projects': 'Progetti', 'nav.mail': 'Mail da gestire', 'nav.docs': 'Documentazione',
   'lang.label': 'Lingua',
+  'week.hours': '{h}h', 'week.title': 'Attività della settimana', 'week.day': 'Giorno', 'week.week': 'Settimana',
+  'week.load': '{a}h di attività + {m}h di riunioni su {c}h disponibili', 'week.dueThisDay': 'scade', 'week.free': 'Nessuna attività pianificata.',
+  'docs.search': 'Cerca progetto o cliente…', 'docs.noMatch': 'Nessun progetto corrisponde a "{q}".',
   'sp.title': 'SharePoint su questo PC', 'sp.help': 'La cartella "Progetti Clienti" sincronizzata da OneDrive: l\'app legge nomi e date dei file (senza scaricarli), trova le cartelle dei progetti e controlla i documenti in tempo reale. I link aprono SharePoint sul web.',
   'sp.use': 'Usa la cartella sincronizzata', 'sp.folder': 'Cartella sul PC', 'sp.folderHelp': 'Percorso di "Progetti Clienti" in Esplora file.',
   'sp.web': 'Indirizzo SharePoint corrispondente', 'sp.advanced': 'Avanzate',
@@ -123,6 +126,9 @@ const IT: Dict = {
 const EN: Dict = {
   'nav.dashboard': 'Dashboard', 'nav.projects': 'Projects', 'nav.mail': 'Mail to answer', 'nav.docs': 'Documentation',
   'lang.label': 'Language',
+  'week.hours': '{h}h', 'week.title': "This week's activities", 'week.day': 'Day', 'week.week': 'Week',
+  'week.load': '{a}h of activities + {m}h of meetings out of {c}h', 'week.dueThisDay': 'due', 'week.free': 'Nothing planned.',
+  'docs.search': 'Search project or client…', 'docs.noMatch': 'No project matches "{q}".',
   'sp.title': 'SharePoint on this PC', 'sp.help': 'The "Progetti Clienti" folder synced by OneDrive: the app reads file names and dates (without downloading them), finds the project folders and checks the documents in real time. Links open SharePoint on the web.',
   'sp.use': 'Use the synced folder', 'sp.folder': 'Folder on this PC', 'sp.folderHelp': 'Path of "Progetti Clienti" in File Explorer.',
   'sp.web': 'Matching SharePoint address', 'sp.advanced': 'Advanced',

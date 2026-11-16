@@ -65,7 +65,8 @@ epic) become **contributor** projects. In the Projects page he can:
   group filter. Deleting a group leaves its projects ungrouped.
 
 The dashboard fits the window: KPIs on top and four panels (today's activities, today's meetings, projects,
-deadlines), each with its own scrollbar — the page itself never scrolls. Sync controls (last sync, Sync now with its
+deadlines), each with its own scrollbar — the page itself never scrolls. The project page follows the same layout: Jira phases,
+"My view" (status, phase override, SharePoint link, note, other deadlines), documentation (wide column) and mail. Sync controls (last sync, Sync now with its
 scope, import snapshot, daily auto-sync) live in **Settings**.
 
 **Daily auto-sync.** At the first opening of the day the app calls `POST /api/sync/auto`; the backend starts a
@@ -143,7 +144,7 @@ request, or the Monday auto-sync); results are sticky until the next check.
 (`confirmedRef` = file URL + `modifiedAt` at that moment; OK on a document Claude can't find = "present elsewhere",
 always ok) · **new** = found, never confirmed · **updated** = a different file or a newer `modifiedAt` than the one
 you confirmed · **missing** · **unchecked** · **waived** ("Not needed"). Red counters = missing documents that are
-due; yellow = new + updated. The Documentation page shows one square tile per project with the two counters;
+due; yellow = new + updated. The Documentation page shows one square tile per project with the two counters (search box on top: project, client or phase);
 a tile opens the checklist with "Where" (file link, sub-folder, last change — or the project folder and the expected
 sub-folder), state, and the **Ok** / **Not needed** buttons (same cells on the project page).
 
@@ -182,7 +183,11 @@ plans the next Monday. *Activities*: open Jira phases assigned to me whose plann
 left to the due date (overdue = all remaining; min 0.25 h); phases with 0 h left are folded away ("close in Jira?").
 *Meetings*: Outlook events of the day, synced with mail (range: today → end of the next working day), labelled with
 the client when its name appears in the subject or an attendee's domain; Teams join link when present. The header
-shows the load (activity hours + meeting hours vs 8 h).
+shows the load (activity hours + meeting hours vs 8 h). A Day / Week toggle (remembered in the browser) switches the card to
+**the week** — `GET /api/week`: the next 5 working days from the plan day; each phase's remaining estimate is burnt
+down day by day (hours = what is left ÷ working days to the due date), so the days add up to the estimate; overdue
+phases take all their remaining hours on the first day; items without an estimate and manual deadlines show on
+their due day. Meeting hours per day come from the synced calendar (today and the next working day).
 
 Jira status labels in the UI: red → **Critical / Critico**, amber → **Warning / Attenzione**, green → **Ok**,
 grey → n/a.
@@ -246,6 +251,7 @@ Full example: `docs/examples/snapshot.example.json`.
 | PATCH | `/deadlines/:id` | edit a manual deadline (Jira phases are edited in Jira) |
 | GET | `/mail?category=needs_reply&state=all` | triage list (snoozed items return when due) |
 | PATCH | `/mail/:id` | done / snooze / re-assign project |
+| GET | `/week?date=` | week plan: 5 working days with each day's activities (burnt-down estimates), hours and meetings |
 | GET | `/today?date=` | day plan: activities with hours for the day, meetings, load |
 | GET | `/docs?all=true` | documents needing attention (default: missing and due, new, updated) or the full checklist with `required` and `state` |
 | POST | `/projects/:id/docs` | add a document `{ title, repository, phase?, requiredFrom?, locationHint?, foundUrl? }` (a link marks it present) |
@@ -305,4 +311,6 @@ Full example: `docs/examples/snapshot.example.json`.
 | 4d | Daily auto-sync with progress layer; sync controls in Settings; documentation tiles, file links from the client/year SharePoint folder, OK confirmation and new/updated detection | ✅ |
 | 4e | Document location editor: folder browser over Claude's listing of the project folder, or path/link; pinned locations followed at each listing | ✅ |
 | 4f | SharePoint read from the OneDrive-synced folder on the PC: folder discovery, live file lists, local document checks | ✅ |
+| 4g | Weekly view of activities; project search on the Documentation page | ✅ |
+| 4h | Project page in four scrolling panels (no page scroll) | ✅ |
 | 5 | Weekday-morning scheduled sync (daily Jira + mail + calendar, Monday + docs) | at the end |

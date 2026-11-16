@@ -6,7 +6,7 @@ import { config } from './config.ts';
 import { addDays, isoToday } from './flags.ts';
 import { ACTIVE_MAIL, getProjectRow, loadDeadlines, loadProjects, docRef } from './projects.ts';
 import { applyDocTemplate } from './seed.ts';
-import { dayPlan } from './today.ts';
+import { dayPlan, weekPlan } from './today.ts';
 import { importSnapshotIfPresent } from './snapshot.ts';
 import { slug, toApi, toApiList } from './util.ts';
 
@@ -83,6 +83,11 @@ export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void })
   });
 
   // ---------- Day plan: today's activities and meetings ----------
+  r.get('/week', (req, res) => {
+    const date = typeof req.query['date'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query['date']) ? req.query['date'] : undefined;
+    res.json(weekPlan(db, date));
+  });
+
   r.get('/today', (req, res) => {
     const date = typeof req.query['date'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query['date']) ? req.query['date'] : undefined;
     res.json(dayPlan(db, date));

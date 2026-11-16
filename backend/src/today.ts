@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { isoToday, phaseIndex, planDay, workdaysInclusive } from './flags.ts';
+import { addDays, isoToday, phaseIndex, planDay, workdaysInclusive } from './flags.ts';
 import { loadDeadlines, loadProjects } from './projects.ts';
 import { toApiList } from './util.ts';
 
@@ -75,5 +75,70 @@ export function dayPlan(db: DatabaseSync, date?: string) {
   return {
     today, day, isToday: day === today, capacityHours: HOURS_PER_DAY, activityHours, meetingHours,
     activities, meetings, calendarSyncedAt: lastCalendar.at,
+  };
+}
+
+const isWorkday = (d: string) => { const w = new Date(`${d}T12:00:00`).getDay(); return w !== 0 && w !== 6; };
+
+/**
+ * The week plan: the next 5 working days from the plan day (today, or Monday on weekends). Each Jira phase's
+ * remaining estimate is burnt down day by day (hours of a day = what is left ÷ working days left to the due date),
+ * so the week adds up to the estimate; overdue phases take all their remaining hours on the first day.
+ * Manual deadlines and phases without an estimate appear on their due day (or the first day when overdue).
+ */
+export function weekPlan(db: DatabaseSync, date?: string) {
+  const today = isoToday();
+  const days: string[] = [];
+  for (let d = date ?? planDay(today); days.length < 5; d = addDays(d, 1)) if (isWorkday(d)) days.push(d);
+  const first = days[0]!;
+  const last = days.at(-1)!;
+
+  const items = loadDeadlines(db, `d.state = 'open' AND p.active = 1 AND d.due_date IS NOT NULL
+      AND (d.source <> 'jira' OR d.assigned_to_me = 1)`)
+    .filter((d) => (d.source === 'jira' ? (d.startDate ?? d.dueDate!) : d.dueDate!) <= last);
+  const left = new Map(items.map((d) => [d.id, d.remainingHours ?? null]));
+
+  const plan = days.map((day) => {
+    const activities = [];
+    for (const d of items) {
+      const due = d.dueDate!;
+      const overdue = due < first;
+      const startsBy = d.source === 'jira' ? (d.startDate ?? due) <= day : true;
+      if (!startsBy) continue;
+      const remaining = left.get(d.id);
+      let hours: number | null;
+      if (d.source !== 'jira' || remaining == null) {
+        // no estimate to spread: show it on its due day (overdue ones on the first day)
+        if (!(due === day || (overdue && day === first))) continue;
+        hours = null;
+      } else {
+        if (!overdue && due < day) continue; // done by its due date
+        if (remaining <= 0) continue;
+        hours = overdue ? remaining : Math.min(remaining, Math.max(0.25, round(remaining / workdaysInclusive(day, due))));
+        left.set(d.id, remaining - hours);
+        if (hours <= 0) continue;
+      }
+      activities.push({
+        id: d.id, projectId: d.effProjectId, projectName: d['projectName'] ?? null, epicSummary: d['epicSummary'] ?? null,
+        title: d.title, phaseName: d.phaseName ?? null, source: d['source'], url: d['url'] ?? null,
+        startDate: d.startDate, dueDate: due, remainingHours: d.remainingHours ?? null, hoursToday: hours,
+        overdue, dueToday: due === day, flags: d.flags, openSubtasks: (d['openSubtasks'] as unknown[]) ?? [],
+      });
+    }
+    activities.sort((a, b) => Number(b.overdue) - Number(a.overdue) || Number(b.dueToday) - Number(a.dueToday)
+      || (b.hoursToday ?? 0) - (a.hoursToday ?? 0) || a.dueDate.localeCompare(b.dueDate));
+    const meetings = dayPlan(db, day);
+    return {
+      day, isToday: day === today, activities,
+      activityHours: round(activities.reduce((n, a) => n + (a.hoursToday ?? 0), 0)),
+      meetingHours: meetings.meetingHours, meetingCount: meetings.meetings.length,
+    };
+  });
+
+  return {
+    today, from: first, to: last, capacityHours: HOURS_PER_DAY * days.length,
+    activityHours: round(plan.reduce((n, d) => n + d.activityHours, 0)),
+    meetingHours: round(plan.reduce((n, d) => n + d.meetingHours, 0)),
+    days: plan,
   };
 }

@@ -19,56 +19,113 @@
   }
 
   <section class="dash-grid">
-    <!-- 1. Today's activities -->
+    <!-- 1. Activities: day / week -->
     <div class="card panel">
-      @if (plan.value(); as p) {
-        <div class="card-head">
-          <h2>{{ p.isToday ? ('today.title' | t) : ('today.titleFor' | t: { d: (p.day | date: 'EEEE d/MM' : undefined : i18n.locale()) }) }}</h2>
-          <span class="small muted">{{ 'today.load' | t: { a: p.activityHours, m: p.meetingHours, c: p.capacityHours } }}</span>
-        </div>
-        @if (!p.isToday) {
-          <div class="note small">{{ 'today.weekend' | t: { d: (p.day | date: 'EEEE d MMMM' : undefined : i18n.locale()) } }}</div>
-        }
-        @if (load(); as l) {
-          <div class="loadbar" [class.over]="l.over">
-            <span class="act" [style.width.%]="l.activities"></span><span class="meet" [style.width.%]="l.meetings"></span>
+      @if (planView() === 'day') {
+        @if (plan.value(); as p) {
+          <div class="card-head">
+            <h2>{{ p.isToday ? ('today.title' | t) : ('today.titleFor' | t: { d: (p.day | date: 'EEEE d/MM' : undefined : i18n.locale()) }) }}</h2>
+            <div class="head-right">
+              <span class="small muted">{{ 'today.load' | t: { a: p.activityHours, m: p.meetingHours, c: p.capacityHours } }}</span>
+              <ng-container *ngTemplateOutlet="viewToggle" />
+            </div>
           </div>
+          @if (!p.isToday) {
+            <div class="note small">{{ 'today.weekend' | t: { d: (p.day | date: 'EEEE d MMMM' : undefined : i18n.locale()) } }}</div>
+          }
+          @if (load(); as l) {
+            <div class="loadbar" [class.over]="l.over">
+              <span class="act" [style.width.%]="l.activities"></span><span class="meet" [style.width.%]="l.meetings"></span>
+            </div>
+          }
+          <div class="scroll">
+            @if (p.activities.length) {
+              <ul class="deadline-list">
+                @for (a of (showIdle() ? p.activities : activeActivities()); track a.id) {
+                  <li>
+                    <div>
+                      <div>
+                        @if (a.url) { <a [href]="a.url" target="_blank">{{ a.epicSummary ?? a.projectName }} – {{ a.phaseName ?? a.title }}</a> }
+                        @else if (a.projectId) { <a [routerLink]="['/projects', a.projectId]">{{ a.projectName }} – {{ a.title }}</a> }
+                        @else { {{ a.title }} }
+                      </div>
+                      <div class="small muted">
+                        @if (a.remainingHours != null) { {{ 'dash.hoursLeft' | t: { h: a.remainingHours } }} · }
+                        {{ a.dueToday ? ('today.dueToday' | t) : ('today.due' | t: { d: (a.dueDate | date: 'dd/MM' : undefined : i18n.locale()) }) }}
+                        @if (a.openSubtasks.length) { · {{ 'pd.open' | t }} {{ a.openSubtasks[0].summary }}@if (a.openSubtasks.length > 1) {…} }
+                      </div>
+                    </div>
+                    <div class="right">
+                      @if (a.hoursToday != null) { <span class="hours">{{ 'today.hours' | t: { h: a.hoursToday } }}</span> }
+                      @else { <span class="badge">{{ 'today.noEstimate' | t }}</span> }
+                      @if (a.overdue) { <span class="badge red">{{ 'flag.overdue' | t }}</span> }
+                    </div>
+                  </li>
+                }
+              </ul>
+              @if (idleActivities().length) {
+                <button class="link small" (click)="showIdle.set(!showIdle())">{{ (showIdle() ? 'today.hideIdle' : 'today.showIdle') | t: { n: idleActivities().length } }}</button>
+              }
+            } @else {
+              <div class="empty">{{ 'today.none' | t }}</div>
+            }
+          </div>
+        } @else {
+          <div class="card-head"><h2>{{ 'today.title' | t }}</h2><ng-container *ngTemplateOutlet="viewToggle" /></div>
+        }
+      } @else {
+        <div class="card-head">
+          <h2>{{ 'week.title' | t }}</h2>
+          <ng-container *ngTemplateOutlet="viewToggle" />
+        </div>
+        @if (week.value(); as w) {
+          <div class="small muted week-summary">{{ w.from | date: 'EEE d/MM' : undefined : i18n.locale() }} – {{ w.to | date: 'EEE d/MM' : undefined : i18n.locale() }}
+            · {{ 'week.load' | t: { a: w.activityHours, m: w.meetingHours, c: w.capacityHours } }}</div>
         }
         <div class="scroll">
-          @if (p.activities.length) {
-            <ul class="deadline-list">
-              @for (a of (showIdle() ? p.activities : activeActivities()); track a.id) {
-                <li>
-                  <div>
-                    <div>
-                      @if (a.url) { <a [href]="a.url" target="_blank">{{ a.epicSummary ?? a.projectName }} – {{ a.phaseName ?? a.title }}</a> }
-                      @else if (a.projectId) { <a [routerLink]="['/projects', a.projectId]">{{ a.projectName }} – {{ a.title }}</a> }
-                      @else { {{ a.title }} }
-                    </div>
-                    <div class="small muted">
-                      @if (a.remainingHours != null) { {{ 'dash.hoursLeft' | t: { h: a.remainingHours } }} · }
-                      {{ a.dueToday ? ('today.dueToday' | t) : ('today.due' | t: { d: (a.dueDate | date: 'dd/MM' : undefined : i18n.locale()) }) }}
-                      @if (a.openSubtasks.length) { · {{ 'pd.open' | t }} {{ a.openSubtasks[0].summary }}@if (a.openSubtasks.length > 1) {…} }
-                    </div>
-                  </div>
-                  <div class="right">
-                    @if (a.hoursToday != null) { <span class="hours">{{ 'today.hours' | t: { h: a.hoursToday } }}</span> }
-                    @else { <span class="badge">{{ 'today.noEstimate' | t }}</span> }
-                    @if (a.overdue) { <span class="badge red">{{ 'flag.overdue' | t }}</span> }
-                  </div>
-                </li>
-              }
-            </ul>
-            @if (idleActivities().length) {
-              <button class="link small" (click)="showIdle.set(!showIdle())">{{ (showIdle() ? 'today.hideIdle' : 'today.showIdle') | t: { n: idleActivities().length } }}</button>
+          @if (week.value(); as w) {
+            @for (d of w.days; track d.day) {
+              <section class="week-day" [class.today]="d.isToday">
+                <div class="week-day-head">
+                  <strong>{{ d.day | date: 'EEEE d/MM' : undefined : i18n.locale() }}</strong>
+                  <span class="small muted">{{ 'today.load' | t: { a: d.activityHours, m: d.meetingHours, c: w.capacityHours / w.days.length } }}</span>
+                </div>
+                <div class="loadbar thin" [class.over]="d.activityHours + d.meetingHours > w.capacityHours / w.days.length">
+                  <span class="act" [style.width.%]="dayShare(d.activityHours, d.meetingHours, w.capacityHours / w.days.length).a"></span>
+                  <span class="meet" [style.width.%]="dayShare(d.activityHours, d.meetingHours, w.capacityHours / w.days.length).m"></span>
+                </div>
+                @if (d.activities.length) {
+                  <ul class="week-list">
+                    @for (a of d.activities; track a.id) {
+                      <li>
+                        <span class="what">
+                          @if (a.url) { <a [href]="a.url" target="_blank">{{ a.epicSummary ?? a.projectName }} – {{ a.phaseName ?? a.title }}</a> }
+                          @else if (a.projectId) { <a [routerLink]="['/projects', a.projectId]">{{ a.projectName }} – {{ a.title }}</a> }
+                          @else { {{ a.title }} }
+                          @if (a.dueToday) { <span class="badge amber">{{ 'week.dueThisDay' | t }}</span> }
+                          @if (a.overdue) { <span class="badge red">{{ 'flag.overdue' | t }}</span> }
+                        </span>
+                        @if (a.hoursToday != null) { <span class="hours">{{ 'week.hours' | t: { h: a.hoursToday } }}</span> }
+                        @else { <span class="badge">{{ 'today.noEstimate' | t }}</span> }
+                      </li>
+                    }
+                  </ul>
+                } @else {
+                  <div class="small muted week-empty">{{ 'week.free' | t }}</div>
+                }
+              </section>
             }
-          } @else {
-            <div class="empty">{{ 'today.none' | t }}</div>
+          } @else if (week.isLoading()) {
+            <div class="empty">…</div>
           }
         </div>
-      } @else {
-        <div class="card-head"><h2>{{ 'today.title' | t }}</h2></div>
       }
+      <ng-template #viewToggle>
+        <div class="segmented mini">
+          <button [class.on]="planView() === 'day'" (click)="planView.set('day')">{{ 'week.day' | t }}</button>
+          <button [class.on]="planView() === 'week'" (click)="planView.set('week')">{{ 'week.week' | t }}</button>
+        </div>
+      </ng-template>
     </div>
 
     <!-- 2. Today's meetings -->

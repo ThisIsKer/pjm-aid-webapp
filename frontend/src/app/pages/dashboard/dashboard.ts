@@ -1,9 +1,9 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { I18n, TPipe, jiraReason } from '../../core/i18n';
-import type { Dashboard, DayPlan, Meeting, Project, ProjectGroup, Rag } from '../../core/models';
+import type { Dashboard, DayPlan, Meeting, Project, ProjectGroup, Rag, WeekPlan } from '../../core/models';
 import { FlagBadges } from '../../shared/flag-badges';
 import { RagDot } from '../../shared/rag-dot';
 import { SyncService } from '../../core/sync';
@@ -17,7 +17,7 @@ type ProjectRow =
 
 @Component({
   selector: 'app-dashboard',
-  imports: [DatePipe, RouterLink, RagDot, FlagBadges, TPipe],
+  imports: [DatePipe, NgTemplateOutlet, RouterLink, RagDot, FlagBadges, TPipe],
   templateUrl: './dashboard.html',
 })
 export class DashboardPage {
@@ -25,12 +25,23 @@ export class DashboardPage {
   protected readonly i18n = inject(I18n);
   protected readonly data = httpResource<Dashboard>(() => '/api/dashboard');
   protected readonly plan = httpResource<DayPlan>(() => '/api/today');
+  /** Activities card: day or week view (remembered in this browser). */
+  protected readonly planView = signal<'day' | 'week'>(DashboardPage.stored('pjm.planView') === 'week' ? 'week' : 'day');
+  protected readonly week = httpResource<WeekPlan>(() => (this.planView() === 'week' ? '/api/week' : undefined));
   protected readonly groups = httpResource<ProjectGroup[]>(() => '/api/groups');
   protected readonly syncMessage = signal<string | null>(null);
   protected readonly onlyMine = signal(false);
 
   /** '' = all groups, 'none' = ungrouped, otherwise a group id. Remembered in this browser. */
   protected readonly groupFilter = signal<string>(DashboardPage.storedFilter());
+
+  private static stored(key: string): string | null {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
 
   private static storedFilter(): string {
     try {
@@ -41,6 +52,14 @@ export class DashboardPage {
   }
 
   constructor() {
+    effect(() => {
+      const v = this.planView();
+      try {
+        localStorage.setItem('pjm.planView', v);
+      } catch {
+        /* session only */
+      }
+    });
     // reload when a sync (auto or from Settings) ends
     effect(() => {
       if (this.sync.completed()) this.reload();
@@ -101,11 +120,17 @@ export class DashboardPage {
   protected readonly idleActivities = computed(() => (this.plan.value()?.activities ?? []).filter((a) => !a.overdue && a.hoursToday === 0));
 
   protected reason = (p: Project) => jiraReason(this.i18n, p);
+  /** Width (%) of activities and meetings in a day's load bar. */
+  protected dayShare(a: number, m: number, cap: number) {
+    const total = Math.max(cap, a + m) || 1;
+    return { a: (a / total) * 100, m: (m / total) * 100 };
+  }
   protected isTentative = (m: Meeting) => m.showAs === 'tentative';
 
   protected reload() {
     this.data.reload();
     this.plan.reload();
+    if (this.planView() === 'week') this.week.reload();
     this.groups.reload();
   }
 

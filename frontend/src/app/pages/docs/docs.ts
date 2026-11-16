@@ -22,6 +22,7 @@ interface Tile {
     <header class="page-head">
       <h1>{{ 'docs.title' | t }}</h1>
       <div class="meta">
+        <input class="tile-search" type="search" [value]="query()" (input)="query.set($any($event.target).value)" [placeholder]="'docs.search' | t" />
         <span class="small"><span class="count-dot red"></span>{{ 'docs.totMissing' | t: { n: totals().missing } }}
           · <span class="count-dot amber"></span>{{ 'docs.totAttention' | t: { n: totals().attention } }}</span>
         <button class="primary" (click)="addDoc.open()">+ {{ 'doc.add' | t }}</button>
@@ -30,7 +31,7 @@ interface Tile {
     <p class="muted small">{{ 'docs.help' | t }}</p>
 
     <div class="doc-tiles">
-      @for (g of tiles(); track g.projectId) {
+      @for (g of shownTiles(); track g.projectId) {
         <button class="doc-tile card" (click)="openTile(g.projectId)" [title]="g.projectName">
           <div class="tile-top">
             <div class="tile-name">{{ g.projectName }}</div>
@@ -46,7 +47,7 @@ interface Tile {
           </div>
         </button>
       } @empty {
-        <div class="card empty">{{ 'docs.empty' | t }}</div>
+        <div class="card empty">{{ query() ? ('docs.noMatch' | t: { q: query() }) : ('docs.empty' | t) }}</div>
       }
     </div>
 
@@ -103,6 +104,8 @@ export class DocsPage {
   protected readonly docs = httpResource<DocRequirement[]>(() => '/api/docs?all=true');
   private readonly projects = httpResource<Project[]>(() => '/api/projects');
   protected readonly selectedId = signal<string | null>(null);
+  /** Filter on project name, client or phase (all words must match). */
+  protected readonly query = signal('');
   private readonly detail = viewChild.required<ElementRef<HTMLDialogElement>>('detail');
 
   protected readonly projectOptions = computed(() =>
@@ -123,6 +126,15 @@ export class DocsPage {
       map.set(d.projectId, t);
     }
     return [...map.values()].sort((a, b) => b.missing - a.missing || b.attention - a.attention || a.projectName.localeCompare(b.projectName));
+  });
+
+  protected readonly shownTiles = computed(() => {
+    const words = this.query().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return this.tiles();
+    return this.tiles().filter((t) => {
+      const hay = `${t.projectName} ${t.client ?? ''} ${t.phase ?? ''}`.toLowerCase();
+      return words.every((w) => hay.includes(w));
+    });
   });
 
   protected readonly totals = computed(() => this.tiles().reduce((s, t) => ({ missing: s.missing + t.missing, attention: s.attention + t.attention }),

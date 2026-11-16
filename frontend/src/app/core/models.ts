@@ -185,6 +185,11 @@ export interface Meeting {
   webLink: string | null; attendeeCount: number; client: string | null; projectIds: string[];
 }
 
+export interface WeekPlan {
+  today: string; from: string; to: string; capacityHours: number; activityHours: number; meetingHours: number;
+  days: { day: string; isToday: boolean; activities: TodayActivity[]; activityHours: number; meetingHours: number; meetingCount: number }[];
+}
+
 export interface DayPlan {
   today: string; day: string; isToday: boolean; capacityHours: number; activityHours: number; meetingHours: number;
   activities: TodayActivity[]; meetings: Meeting[]; calendarSyncedAt: string | null;

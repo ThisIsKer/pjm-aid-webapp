@@ -2,126 +2,148 @@
   <div class="error">{{ 'pd.notFound' | t }} <a routerLink="/projects">{{ 'pd.back' | t }}</a></div>
 }
 @if (project.value(); as p) {
-  <header class="page-head">
-    <div>
-      <div class="small muted"><a routerLink="/projects">{{ 'nav.projects' | t }}</a> /</div>
-      <h1><app-rag-dot [status]="p.status" /> {{ p.name }}</h1>
-      <div class="small muted">
-        {{ p.client }} · {{ p.role === 'pm' ? ('pd.pm' | t) : ('common.contributor' | t) }}
-        @for (k of p.jiraKeys; track k) { · <a [href]="jiraUrl(k)" target="_blank">{{ k }}</a> }
-        @if (p.sharepointUrl) { · <a [href]="p.sharepointUrl" target="_blank">{{ 'pd.spFolder' | t }}</a> }
+  <div class="dash">
+    <header class="page-head">
+      <div>
+        <div class="small muted"><a routerLink="/projects">{{ 'nav.projects' | t }}</a> /</div>
+        <h1><app-rag-dot [status]="p.status" /> {{ p.name }}</h1>
+        <div class="small muted">
+          {{ p.client }} · {{ p.role === 'pm' ? ('pd.pm' | t) : ('common.contributor' | t) }}
+          @for (k of p.jiraKeys; track k) { · <a [href]="jiraUrl(k)" target="_blank">{{ k }}</a> }
+          @if (p.sharepointUrl) { · <a [href]="p.sharepointUrl" target="_blank">{{ 'pd.spFolder' | t }}</a> }
+        </div>
       </div>
-    </div>
-    <div class="meta">
-      <span class="badge {{ p.jiraRag }}">{{ 'col.jira' | t }}: {{ 'rag.' + p.jiraRag | t }}</span>
-      <span>{{ reason(p) }}</span>
-      <button (click)="toggleActive()">{{ (p.active ? 'pd.hide' : 'pd.show') | t }}</button>
-    </div>
-  </header>
+      <div class="meta">
+        <span class="badge {{ p.jiraRag }}">{{ 'col.jira' | t }}: {{ 'rag.' + p.jiraRag | t }}</span>
+        <span>{{ reason(p) }}</span>
+        <button (click)="toggleActive()">{{ (p.active ? 'pd.hide' : 'pd.show') | t }}</button>
+      </div>
+    </header>
 
-  <section class="grid two">
-    <div class="card">
-      <h2>{{ 'pd.phases' | t: { p: p.phase ?? p.currentPhase?.name ?? '—' } }}</h2>
-      <table>
-        <thead><tr><th>{{ 'col.phase' | t }}</th><th>{{ 'col.start' | t }}</th><th>{{ 'col.due' | t }}</th><th class="num">{{ 'col.left' | t }}</th><th>{{ 'col.assignee' | t }}</th><th></th></tr></thead>
-        <tbody>
-          @for (d of jiraPhases(); track d.id) {
-            <tr>
-              <td><a [href]="d.url" target="_blank">{{ d.phaseName ?? d.title }}</a><span class="muted small key">{{ d.id }}</span>
-                @if (d.openSubtasks.length) {
-                  <div class="small muted">{{ 'pd.open' | t }} @for (s of d.openSubtasks; track s.key; let last = $last) { {{ s.summary }}@if (!last) {; } }</div>
-                }
-              </td>
-              <td class="small">{{ d.startDate ? (d.startDate | date: 'dd/MM/yy' : undefined : i18n.locale()) : '—' }}</td>
-              <td class="small">{{ d.dueDate ? (d.dueDate | date: 'dd/MM/yy' : undefined : i18n.locale()) : '—' }}</td>
-              <td class="num small">{{ d.remainingHours ?? '?' }} / {{ d.originalHours ?? '?' }} h</td>
-              <td class="small">{{ d.assignee }}</td>
-              <td><app-flag-badges [flags]="d.flags" /></td>
-            </tr>
-          } @empty {
-            <tr><td colspan="6" class="empty">{{ 'pd.noPhases' | t }}</td></tr>
-          }
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card">
-      <h2>{{ 'pd.myView' | t }}</h2>
-      <div class="form">
-        <label>{{ 'pd.status' | t }}
-          <select (change)="status.set($any($event.target).value)">
-            @for (s of statuses; track s) { <option [value]="s" [selected]="s === status()">{{ 'rag.' + s | t }}</option> }
-          </select>
-        </label>
-        <label>{{ 'pd.phaseOverride' | t }} <input [value]="phase()" (input)="phase.set($any($event.target).value)" [placeholder]="'pd.phasePh' | t" /></label>
-        <label>{{ 'pd.spFolder' | t }} <input [value]="sharepointUrl()" (input)="sharepointUrl.set($any($event.target).value)" placeholder="https://…" /></label>
-        <label>{{ 'pd.note' | t }} <textarea rows="4" [value]="pmNote()" (input)="pmNote.set($any($event.target).value)"></textarea></label>
-        <div><button class="primary" (click)="save()">{{ 'common.save' | t }}</button> <span class="small muted">{{ saved() }}</span></div>
+    <section class="dash-grid pd-grid">
+      <!-- Jira phases -->
+      <div class="card panel">
+        <div class="card-head">
+          <h2>{{ 'pd.phases' | t: { p: p.phase ?? p.currentPhase?.name ?? '—' } }}</h2>
+          <span class="small muted">{{ jiraPhases().length }}</span>
+        </div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>{{ 'col.phase' | t }}</th><th>{{ 'col.start' | t }}</th><th>{{ 'col.due' | t }}</th><th class="num">{{ 'col.left' | t }}</th><th>{{ 'col.assignee' | t }}</th><th></th></tr></thead>
+            <tbody>
+              @for (d of jiraPhases(); track d.id) {
+                <tr>
+                  <td><a [href]="d.url" target="_blank">{{ d.phaseName ?? d.title }}</a><span class="muted small key">{{ d.id }}</span>
+                    @if (d.openSubtasks.length) {
+                      <div class="small muted">{{ 'pd.open' | t }} @for (s of d.openSubtasks; track s.key; let last = $last) { {{ s.summary }}@if (!last) {; } }</div>
+                    }
+                  </td>
+                  <td class="small">{{ d.startDate ? (d.startDate | date: 'dd/MM/yy' : undefined : i18n.locale()) : '—' }}</td>
+                  <td class="small">{{ d.dueDate ? (d.dueDate | date: 'dd/MM/yy' : undefined : i18n.locale()) : '—' }}</td>
+                  <td class="num small">{{ d.remainingHours ?? '?' }} / {{ d.originalHours ?? '?' }} h</td>
+                  <td class="small">{{ d.assignee }}</td>
+                  <td><app-flag-badges [flags]="d.flags" /></td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="empty">{{ 'pd.noPhases' | t }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <h2 style="margin-top: 20px">{{ 'pd.other' | t }}</h2>
-      <ul class="deadline-list">
-        @for (d of manual(); track d.id) {
-          <li [class.muted]="d.state === 'done'">
-            <span>{{ d.title }}</span>
-            <span><span class="badge" [class.red]="d.flags.includes('overdue')">{{ d.dueDate | date: 'dd/MM/yy' : undefined : i18n.locale() }}</span>
-              <button (click)="toggleDeadline(d)">{{ (d.state === 'open' ? 'common.done' : 'common.reopen') | t }}</button></span>
-          </li>
-        }
-      </ul>
-      <div class="inline-form">
-        <input [placeholder]="'pd.newPh' | t" [value]="newTitle()" (input)="newTitle.set($any($event.target).value)" />
-        <input type="date" [value]="newDue()" (input)="newDue.set($any($event.target).value)" />
-        <button (click)="addDeadline()">{{ 'common.add' | t }}</button>
-      </div>
-    </div>
-  </section>
+      <!-- My view + other deadlines -->
+      <div class="card panel">
+        <div class="card-head">
+          <h2>{{ 'pd.myView' | t }}</h2>
+          <span class="small muted">{{ saved() }}</span>
+        </div>
+        <div class="scroll">
+          <div class="form">
+            <label>{{ 'pd.status' | t }}
+              <select (change)="status.set($any($event.target).value)">
+                @for (s of statuses; track s) { <option [value]="s" [selected]="s === status()">{{ 'rag.' + s | t }}</option> }
+              </select>
+            </label>
+            <label>{{ 'pd.phaseOverride' | t }} <input [value]="phase()" (input)="phase.set($any($event.target).value)" [placeholder]="'pd.phasePh' | t" /></label>
+            <label>{{ 'pd.spFolder' | t }} <input [value]="sharepointUrl()" (input)="sharepointUrl.set($any($event.target).value)" placeholder="https://…" /></label>
+            <label>{{ 'pd.note' | t }} <textarea rows="4" [value]="pmNote()" (input)="pmNote.set($any($event.target).value)"></textarea></label>
+            <div><button class="primary" (click)="save()">{{ 'common.save' | t }}</button></div>
+          </div>
 
-  <section class="grid two" style="margin-top: 16px">
-    <div class="card">
-      <h2>{{ 'pd.mail' | t }}</h2>
-      <ul class="deadline-list">
-        @for (m of openMail(); track m.id) {
-          <li>
-            <div>
-              <span class="badge" [class.red]="m.category === 'needs_reply'" [class.amber]="m.category === 'waiting'">{{ 'mail.cat.' + m.category | t }}</span>
-              @if (m.webLink) { <a [href]="m.webLink" target="_blank">{{ m.subject }}</a> } @else { {{ m.subject }} }
-              <div class="small muted">{{ m.counterpart }} · {{ m.lastMessageAt | date: 'dd/MM HH:mm' : undefined : i18n.locale() }}</div>
-              @if (m.summary) { <div class="small">{{ m.summary }}</div> }
-            </div>
-            <button (click)="mailDone(m)">{{ 'common.done' | t }}</button>
-          </li>
-        } @empty {
-          <li class="muted">{{ 'pd.noMail' | t }}</li>
-        }
-      </ul>
-    </div>
-
-    <div class="card">
-      <div class="card-head">
-        <h2>{{ 'pd.docs' | t }}</h2>
-        <button (click)="addDoc.open()">+ {{ 'doc.add' | t }}</button>
+          <h3 class="sub-head">{{ 'pd.other' | t }}</h3>
+          <ul class="deadline-list">
+            @for (d of manual(); track d.id) {
+              <li [class.muted]="d.state === 'done'">
+                <span>{{ d.title }}</span>
+                <span><span class="badge" [class.red]="d.flags.includes('overdue')">{{ d.dueDate | date: 'dd/MM/yy' : undefined : i18n.locale() }}</span>
+                  <button (click)="toggleDeadline(d)">{{ (d.state === 'open' ? 'common.done' : 'common.reopen') | t }}</button></span>
+              </li>
+            }
+          </ul>
+          <div class="inline-form">
+            <input [placeholder]="'pd.newPh' | t" [value]="newTitle()" (input)="newTitle.set($any($event.target).value)" />
+            <input type="date" [value]="newDue()" (input)="newDue.set($any($event.target).value)" />
+            <button (click)="addDeadline()">{{ 'common.add' | t }}</button>
+          </div>
+        </div>
       </div>
-      <table>
-        <tbody>
-          @for (r of p.docRequirements; track r.id) {
-            <tr [class.muted]="r.waived">
-              <td>{{ r.title }} <div class="small muted">{{ r.phase }}@if (!r.required) { · {{ 'doc.dueFrom' | t: { p: r.requiredFrom ?? ('doc.nextPhase' | t) } }} }</div></td>
-              <td class="small"><app-doc-location [doc]="r" [folderUrl]="p.sharepointUrl" (edit)="pathDlg.open(r)" /></td>
-              <td><app-doc-state [doc]="r" /></td>
-              <td class="actions">
-                @if (!r.waived) {
-                  <button class="ok-btn" [class.on]="r.state === 'ok'" (click)="toggleOk(r)"
-                    [title]="(r.state === 'ok' ? 'doc.okUndo' : 'doc.okHelp') | t">{{ r.state === 'ok' ? '✓ Ok' : 'Ok' }}</button>
-                }
-                <button (click)="toggleWaive(r)">{{ (r.waived ? 'doc.restore' : 'doc.notNeeded') | t }}</button>
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </section>
+
+      <!-- Documentation (wide column: the "where" cell needs room) -->
+      <div class="card panel">
+        <div class="card-head">
+          <h2>{{ 'pd.docs' | t }}</h2>
+          <button (click)="addDoc.open()">+ {{ 'doc.add' | t }}</button>
+        </div>
+        <div class="scroll">
+          <table class="docs-table">
+            <colgroup><col class="c-title" /><col /><col class="c-state" /><col class="c-actions" /></colgroup>
+            <tbody>
+              @for (r of p.docRequirements; track r.id) {
+                <tr [class.muted]="r.waived">
+                  <td>{{ r.title }} <div class="small muted">{{ r.phase }}@if (!r.required) { · {{ 'doc.dueFrom' | t: { p: r.requiredFrom ?? ('doc.nextPhase' | t) } }} }</div></td>
+                  <td class="small"><app-doc-location [doc]="r" [folderUrl]="p.sharepointUrl" (edit)="pathDlg.open(r)" /></td>
+                  <td><app-doc-state [doc]="r" /></td>
+                  <td class="actions">
+                    @if (!r.waived) {
+                      <button class="ok-btn" [class.on]="r.state === 'ok'" (click)="toggleOk(r)"
+                        [title]="(r.state === 'ok' ? 'doc.okUndo' : 'doc.okHelp') | t">{{ r.state === 'ok' ? '✓ Ok' : 'Ok' }}</button>
+                    }
+                    <button (click)="toggleWaive(r)">{{ (r.waived ? 'doc.restore' : 'doc.notNeeded') | t }}</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Mail -->
+      <div class="card panel">
+        <div class="card-head">
+          <h2>{{ 'pd.mail' | t }}</h2>
+          @if (openMail().length) { <span class="small muted">{{ openMail().length }}</span> }
+        </div>
+        <div class="scroll">
+          <ul class="deadline-list">
+            @for (m of openMail(); track m.id) {
+              <li>
+                <div>
+                  <span class="badge" [class.red]="m.category === 'needs_reply'" [class.amber]="m.category === 'waiting'">{{ 'mail.cat.' + m.category | t }}</span>
+                  @if (m.webLink) { <a [href]="m.webLink" target="_blank">{{ m.subject }}</a> } @else { {{ m.subject }} }
+                  <div class="small muted">{{ m.counterpart }} · {{ m.lastMessageAt | date: 'dd/MM HH:mm' : undefined : i18n.locale() }}</div>
+                  @if (m.summary) { <div class="small">{{ m.summary }}</div> }
+                </div>
+                <button (click)="mailDone(m)">{{ 'common.done' | t }}</button>
+              </li>
+            } @empty {
+              <li class="muted">{{ 'pd.noMail' | t }}</li>
+            }
+          </ul>
+        </div>
+      </div>
+    </section>
+  </div>
   <app-add-doc-dialog #addDoc [projectId]="p.id" (added)="project.reload()" />
   <app-doc-path-dialog #pathDlg (saved)="project.reload()" />
 }
