@@ -107,7 +107,7 @@
           @for (r of p.docRequirements; track r.id) {
             <tr [class.muted]="r.waived">
               <td>{{ r.title }} <div class="small muted">{{ r.phase }}@if (!r.required) { · {{ 'doc.dueFrom' | t: { p: r.requiredFrom ?? ('doc.nextPhase' | t) } }} }</div></td>
-              <td class="small"><app-doc-location [doc]="r" [folderUrl]="p.sharepointUrl" /></td>
+              <td class="small"><app-doc-location [doc]="r" [folderUrl]="p.sharepointUrl" (edit)="pathDlg.open(r)" /></td>
               <td><app-doc-state [doc]="r" /></td>
               <td class="actions">
                 @if (!r.waived) {
@@ -123,4 +123,5 @@
     </div>
   </section>
   <app-add-doc-dialog #addDoc [projectId]="p.id" (added)="project.reload()" />
+  <app-doc-path-dialog #pathDlg (saved)="project.reload()" />
 }

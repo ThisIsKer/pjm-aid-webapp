@@ -106,7 +106,7 @@ Every field has exactly one owner, so a Claude sync never overwrites a decision 
 | Jira epic | which project it belongs to | summary, status, dates, assignee, mine, active |
 | Deadline | manual deadlines | Jira phases (dates, estimates, assignee, status, open sub-tasks) |
 | Mail thread | `userState` (open/done/snoozed), `snoozedUntil`, project re-assignment | subject, counterpart, category, urgency, summary, link, last message |
-| Doc requirement | the checklist (template + per project), `waived`, **OK** (`confirmedAt`, `confirmedRef`) | `checkStatus`, `foundUrl`, `foundPath`, `foundModifiedAt`, `checkedAt` |
+| Doc requirement | the checklist (template + per project), `waived`, **OK** (`confirmedAt`, `confirmedRef`), a location you chose (`pinned`) | `checkStatus`, `foundUrl`, `foundPath`, `foundModifiedAt`, `checkedAt` |
 
 Rules applied on import:
 
@@ -147,6 +147,15 @@ due; yellow = new + updated. The Documentation page shows one square tile per pr
 a tile opens the checklist with "Where" (file link, sub-folder, last change — or the project folder and the expected
 sub-folder), state, and the **Ok** / **Not needed** buttons (same cells on the project page).
 
+**Choosing the file yourself** — the pencil in the "Where" cell opens *Where is this document?*: browse the
+project folder (sub-folders, files with their last change, search across the whole folder) and pick the file, or
+type a path below the project folder / paste a link. The folder tree comes from the listing Claude writes at each
+documentation check (`files.json` → snapshot `projectFiles` → table `project_files`); the app itself has no
+SharePoint access, so the tree is as fresh as the last docs sync. The chosen location is **pinned**: Claude's
+matching no longer changes it, and at each new listing the app follows that file (newer date → *updated*; file gone
+→ *missing*, shown as "No longer there"). Choosing a file counts as OK for its current version. "Back to automatic
+detection" removes the pin.
+
 Default checklist (edit freely): Documento di analisi · Open Topics Log · Verbale system test · Testbook UAT ·
 Verbale di collaudo UAT · Piano di cutover / go-live · Documentazione di prodotto aggiornata (Confluence, Tecnica only).
 
@@ -165,12 +174,12 @@ grey → n/a.
 stages it to know projects, current phases, SharePoint folders, the checklist with `required` flags, open mail
 threads and the last sync time.
 
-## 6. Database schema (v7)
+## 6. Database schema (v8)
 
-`projects` · `project_groups` · `jira_epics` · `deadlines` (+ view `v_deadlines` resolving each phase's project through its epic) ·
+`projects` · `project_groups` · `project_files` · `jira_epics` · `deadlines` (+ view `v_deadlines` resolving each phase's project through its epic) ·
 `mail_threads` · `calendar_events` · `doc_requirements` · `doc_template` · `sync_runs` · `sync_jobs` — see `backend/src/db.ts`.
 Migrations are append-only and tracked with `PRAGMA user_version` (v3 adds `projects.sharepoint_folder_uri`,
-`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`). Requirement id = `<projectId>--<slug(title)>`, which is the id
+`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`; v8 adds `project_files`, `projects.files_scanned_at`, `doc_requirements.pinned`). Requirement id = `<projectId>--<slug(title)>`, which is the id
 Claude reports back in `docChecks`.
 
 ## 7. Snapshot contract v2 (`data/inbox/snapshot.json`)
@@ -190,6 +199,7 @@ Written by the `pjm-sync` skill through `tools/build-snapshot.ts`; the backend w
   },
   "projects":    [{ "id", "suggestedStatus": "green|amber|red|grey", "suggestedReason" }],
   "projectFolders": [{ "projectId", "folderUri": "file:///<driveId>/…", "webUrl" }],
+  "projectFiles": [{ "projectId", "files": [{ "path", "url", "modifiedAt", "size" }] }],   // full listing, replaces the previous one
   "mailThreads": [{ "id": "mail:<subject slug>", "projectId|null", "subject", "counterpart",
                     "lastMessageAt", "lastFromMe", "category": "needs_reply|waiting|fyi",
                     "urgency": "high|normal|low", "summary", "webLink" }],
@@ -222,6 +232,8 @@ Full example: `docs/examples/snapshot.example.json`.
 | GET | `/today?date=` | day plan: activities with hours for the day, meetings, load |
 | GET | `/docs?all=true` | documents needing attention (default: missing and due, new, updated) or the full checklist with `required` and `state` |
 | POST | `/projects/:id/docs` | add a document `{ title, repository, phase?, requiredFrom?, locationHint?, foundUrl? }` (a link marks it present) |
+| GET | `/projects/:id/files` | files of the project folder from the last listing (folder browser) |
+| PUT/DELETE | `/docs/:id/location` | `{ location }` path below the project folder or link → pinned + OK / back to automatic detection |
 | PATCH | `/docs/:id` | `{ confirmed }` OK / remove OK · `{ waived }` not needed · edit hint |
 | POST | `/sync/import?force=true` | import the snapshot now |
 | GET | `/sync/runs` | last 20 imports with counts and warnings |
@@ -253,7 +265,7 @@ Full example: `docs/examples/snapshot.example.json`.
 3. **MCP server** (`backend/src/mcp.ts`, stdio, talks to the running backend's REST API so the backend stays the
    only writer). Tools: `pjm_dashboard`, `pjm_list_projects`, `pjm_get_project` (id, epic key or name),
    `pjm_today`, `pjm_list_mail`, `pjm_update_mail` (done / snooze / reopen / assign), `pjm_doc_gaps`, `pjm_update_project`
-   (status, PM note, phase override, SharePoint link, hide/show, custom group — created if missing), `pjm_add_deadline`, `pjm_waive_doc`, `pjm_confirm_doc`,
+   (status, PM note, phase override, SharePoint link, hide/show, custom group — created if missing), `pjm_add_deadline`, `pjm_waive_doc`, `pjm_confirm_doc`, `pjm_set_doc_location`,
    `pjm_sync_status`. Register it in Claude Code with
    `claude mcp add pjm-aid --scope user -- node <repo>\backend\src\mcp.ts`, and in the Claude desktop app
    (so Cowork sessions linked to the laptop see it) under `mcpServers` in `claude_desktop_config.json`.
@@ -272,4 +284,5 @@ Full example: `docs/examples/snapshot.example.json`.
 | 4b | Today's activities and meetings (calendar sync), Italian/English UI, status labels Critical/Warning/Ok, add-document dialog | ✅ |
 | 4c | Dark theme + Settings page, no-scroll dashboard with per-panel scrollbars, custom project groups | ✅ |
 | 4d | Daily auto-sync with progress layer; sync controls in Settings; documentation tiles, file links from the client/year SharePoint folder, OK confirmation and new/updated detection | ✅ |
+| 4e | Document location editor: folder browser over Claude's listing of the project folder, or path/link; pinned locations followed at each listing | ✅ |
 | 5 | Weekday-morning scheduled sync (daily Jira + mail + calendar, Monday + docs) | at the end |

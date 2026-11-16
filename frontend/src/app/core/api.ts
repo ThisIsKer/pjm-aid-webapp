@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import type { Deadline, DocRequirement, MailThread, Project, ProjectGroup, SyncJob } from './models';
+import type { Deadline, DocRequirement, MailThread, Project, ProjectFiles, ProjectGroup, SyncJob } from './models';
 
 /** Write operations. Reads use httpResource() directly in the pages. */
 @Injectable({ providedIn: 'root' })
@@ -35,6 +35,19 @@ export class Api {
 
   deleteGroup(id: number) {
     return firstValueFrom(this.http.delete<{ ok: boolean }>(`/api/groups/${id}`));
+  }
+
+  projectFiles(projectId: string) {
+    return firstValueFrom(this.http.get<ProjectFiles>(`/api/projects/${encodeURIComponent(projectId)}/files`));
+  }
+
+  /** location = path below the project folder, or a full link. */
+  setDocLocation(id: string, location: string) {
+    return firstValueFrom(this.http.put<DocRequirement>(`/api/docs/${encodeURIComponent(id)}/location`, { location }));
+  }
+
+  clearDocLocation(id: string) {
+    return firstValueFrom(this.http.delete<DocRequirement>(`/api/docs/${encodeURIComponent(id)}/location`));
   }
 
   linkEpic(key: string, projectId: string) {

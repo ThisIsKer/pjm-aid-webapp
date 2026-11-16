@@ -203,6 +203,18 @@ const MIGRATIONS: string[] = [
   ALTER TABLE doc_requirements ADD COLUMN confirmed_at TEXT;
   ALTER TABLE doc_requirements ADD COLUMN confirmed_ref TEXT;
   `,
+  /* v8 — files of each SharePoint project folder (folder browser) and document locations chosen by the user */ `
+  CREATE TABLE project_files (
+    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    path        TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    modified_at TEXT,
+    size        INTEGER,
+    PRIMARY KEY (project_id, path)
+  );
+  ALTER TABLE projects ADD COLUMN files_scanned_at TEXT;
+  ALTER TABLE doc_requirements ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export function openDb(file: string): DatabaseSync {

@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { Api } from '../../core/api';
 import { SyncService } from '../../core/sync';
 import { DocLocation, DocStateBadge } from '../../shared/doc-cells';
+import { DocPathDialog } from '../../shared/doc-path-dialog';
 import { I18n, TPipe, jiraReason } from '../../core/i18n';
 import { AddDocDialog } from '../../shared/add-doc-dialog';
 import type { Deadline, DocRequirement, MailThread, ProjectDetail, Rag } from '../../core/models';
@@ -13,7 +14,7 @@ import { RagDot } from '../../shared/rag-dot';
 
 @Component({
   selector: 'app-project-detail',
-  imports: [DatePipe, RouterLink, FlagBadges, RagDot, TPipe, AddDocDialog, DocLocation, DocStateBadge],
+  imports: [DatePipe, RouterLink, FlagBadges, RagDot, TPipe, AddDocDialog, DocLocation, DocStateBadge, DocPathDialog],
   templateUrl: './project-detail.html',
 })
 export class ProjectDetailPage {

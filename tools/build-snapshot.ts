@@ -17,6 +17,7 @@
  *   mail.json    [{subject, projectId?, counterpart, lastMessageAt, lastFromMe, category, urgency, summary, webLink}]
  *   docs.json    [{requirementId, status: missing|present|outdated|unknown, foundUrl?, foundPath?, modifiedAt?, checkedAt?}]
  *   folders.json [{projectId, folderUri, webUrl}]
+ *   files.json   [{projectId, folderUrl, files: [{webUrl|url, path?, lastModifiedDateTime|modifiedAt, size?}]}] — every file of the project folder
  * --calendar takes raw Microsoft 365 `outlook_calendar_search` results (saved tool output, possibly several JSON
  * objects back to back) or compact rows [{id, subject, start, end, isAllDay, location, organizer, organizerName,
  * showAs, isCancelled, isOrganizer, webLink, onlineUrl}] — start/end as ISO strings (UTC with Z, or local time).
@@ -197,6 +198,17 @@ const docChecks = readJson('docs').map((d) => ({
   foundUrl: d.foundUrl ?? undefined, foundPath: d.foundPath ?? undefined, modifiedAt: d.modifiedAt ?? d.lastModifiedDateTime ?? undefined,
   checkedAt: d.checkedAt ?? undefined,
 }));
+const dec = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
+const projectFiles = readJson('files').map((pf) => {
+  const folder = dec(String(pf.folderUrl ?? '')).replace(/\/+$/, '');
+  const files = (pf.files ?? []).map((f: any) => {
+    const url = String(f.url ?? f.webUrl ?? '').replace(/ /g, '%20');
+    const full = dec(url);
+    const path = f.path ?? (folder && full.toLowerCase().startsWith(`${folder.toLowerCase()}/`) ? full.slice(folder.length + 1) : full.split('/').slice(-2).join('/'));
+    return { path: String(path), url, modifiedAt: f.modifiedAt ?? f.lastModifiedDateTime ?? undefined, size: typeof f.size === 'number' ? f.size : undefined };
+  }).filter((f: { url: string }) => f.url);
+  return { projectId: String(pf.projectId), files };
+});
 const projectFolders = readJson('folders').map((f) => ({ projectId: String(f.projectId), folderUri: String(f.folderUri), webUrl: f.webUrl }));
 
 const snapshot: SnapshotV2 = {
@@ -207,6 +219,7 @@ const snapshot: SnapshotV2 = {
   ...(a['mail'] ? { mailThreads: [...mailById.values()] } : {}),
   ...(a['docs'] ? { docChecks } : {}),
   ...(a['folders'] ? { projectFolders } : {}),
+  ...(a['files'] ? { projectFiles } : {}),
   ...(a['calendar'] ? { calendar: { from: a['calendar-from']![0]!, to: a['calendar-to']![0]!, events: uniqueEvents } } : {}),
 };
 fs.mkdirSync(path.dirname(a['out'][0]), { recursive: true });
@@ -235,6 +248,7 @@ if (a['mail']) {
   for (const m of byCat('needs_reply')) console.log(`  - ${m.urgency === 'high' ? '[urgent] ' : ''}${m.subject} — ${m.counterpart ?? ''}`);
 }
 if (a['calendar']) console.log(`CALENDAR: ${uniqueEvents.length} event(s) between ${a['calendar-from']![0]} and ${a['calendar-to']![0]}`);
+if (a['files']) console.log(`FILES: ${projectFiles.reduce((n, p) => n + p.files.length, 0)} file(s) listed in ${projectFiles.length} project folder(s)`);
 if (a['docs']) {
   const by = (st: string) => docChecks.filter((d) => d.status === st).length;
   console.log(`DOCS checked: ${docChecks.length} (present ${by('present')}, missing ${by('missing')}, outdated ${by('outdated')}, unknown ${by('unknown')})`);

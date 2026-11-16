@@ -116,6 +116,8 @@ export interface DocRequirement {
   foundModifiedAt: string | null;
   confirmedAt: string | null;
   checkedAt: string | null;
+  /** Location chosen by the user (kept over Claude's matching). */
+  pinned: boolean;
   waived: boolean;
   required: boolean;
   projectPhase?: string | null;
@@ -187,3 +189,7 @@ export interface DayPlan {
   today: string; day: string; isToday: boolean; capacityHours: number; activityHours: number; meetingHours: number;
   activities: TodayActivity[]; meetings: Meeting[]; calendarSyncedAt: string | null;
 }
+
+/** A file of the project's SharePoint folder, as listed by Claude's last documentation check. */
+export interface ProjectFile { path: string; url: string; modifiedAt: string | null; size: number | null }
+export interface ProjectFiles { folderUrl: string | null; scannedAt: string | null; files: ProjectFile[] }

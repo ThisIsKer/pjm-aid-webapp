@@ -125,7 +125,7 @@ weekend from today through Monday. `outlook_calendar_search` with `query: "*"`, 
 - Builder arguments: `--calendar <files> --calendar-from <YYYY-MM-DD> --calendar-to <YYYY-MM-DD, exclusive>`;
   the app replaces its events in that range.
 
-## 3. Documentation (docs mode only) → `docs.json`, `folders.json`
+## 3. Documentation (docs mode only) → `docs.json`, `folders.json`, `files.json`
 
 Check **every active registry project** and **every checklist item that is not waived** (required or not yet
 required, present or not): the app shows where each document is and flags files that are new or were changed
@@ -150,7 +150,12 @@ since Sebastiano confirmed them, so present documents must be re-reported every 
    Standard subfolders: 0. Offerta · 1. Avvio · 2. Pianificazione · 3. Analisi · 4. Implementazione · 5. UAT ·
    6. Cutover - Live · 7. Post Golive - Chiusura · 8. CR Extra · 99. Project documents [SHARED WITH CUSTOMER]
    (subfolders such as Kickoff, Planning, Process Mapping, Requirements Gathering, UAT).
-3. **Match each checklist item** to a file (use the item's `locationHint` and phase): analysis ≈ "Analisi",
+   Write **every** file found (not only the matches) to `files.json`, one entry per project:
+   `{"projectId","folderUrl":<project folder webUrl>,"files":[{"webUrl","lastModifiedDateTime","size"}]}` — copy the
+   values as returned; the builder derives each file's path below the folder. The app uses this listing for its
+   folder browser ("where is this document?") and to follow files Sebastiano picked himself.
+3. Items with `pinned: true` in the registry have a file chosen by Sebastiano: don't match them (the app follows
+   that file through `files.json`). **Match each other checklist item** to a file (use the item's `locationHint` and phase): analysis ≈ "Analisi",
    "Requirements Gathering", "Raccolta requisiti"; Open Topics Log ≈ "Open Topics", "Open Point"; system test ≈
    "Internal testing", "Test interni", "System test"; UAT testbook ≈ "Testbook"; UAT sign-off ≈ "Verbale
    collaudo/UAT"; cutover ≈ "cutover", "go-live plan". Several candidates → the most recently modified one.
@@ -163,13 +168,13 @@ since Sebastiano confirmed them, so present documents must be re-reported every 
      (e.g. `title ~ "FEI Slovacchia" AND type = page`) — `present` with the page URL and its last-modified date
      if a product page was updated in the project period, otherwise `missing`.
 4. Write `docs.json`: `[{"requirementId","status","foundUrl","foundPath","modifiedAt"}]` (`foundUrl`, `foundPath`,
-   `modifiedAt` only for `present`).
+   `modifiedAt` only for `present`; pinned items can be left out).
 
 ## 4. Build and deliver
 
 Arguments (omit the optional ones you have no file for):
 `--me <account_id> --site https://archivagroup.atlassian.net --epics … --phases … [--foreign …] [--subtasks …]
-[--mail mail.json] [--calendar … --calendar-from … --calendar-to …] [--docs docs.json] [--folders folders.json]
+[--mail mail.json] [--calendar … --calendar-from … --calendar-to …] [--docs docs.json] [--folders folders.json] [--files files.json]
 --out <out>`
 
 - **Local:** `node tools/build-snapshot.ts <arguments> --out data/inbox/snapshot.json` — done; the app imports it.

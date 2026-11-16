@@ -8,6 +8,7 @@ import type { DocRequirement, Project } from '../../core/models';
 import { SyncService } from '../../core/sync';
 import { AddDocDialog } from '../../shared/add-doc-dialog';
 import { DocLocation, DocStateBadge } from '../../shared/doc-cells';
+import { DocPathDialog } from '../../shared/doc-path-dialog';
 
 interface Tile {
   projectId: string; projectName: string; client: string | null; phase: string | null; folderUrl: string | null;
@@ -16,7 +17,7 @@ interface Tile {
 
 @Component({
   selector: 'app-docs',
-  imports: [DatePipe, RouterLink, TPipe, AddDocDialog, DocLocation, DocStateBadge],
+  imports: [DatePipe, RouterLink, TPipe, AddDocDialog, DocLocation, DocStateBadge, DocPathDialog],
   template: `
     <header class="page-head">
       <h1>{{ 'docs.title' | t }}</h1>
@@ -74,7 +75,7 @@ interface Tile {
                 <tr [class.muted]="r.waived">
                   <td>{{ r.title }}
                     <div class="small muted">{{ r.phase ?? '—' }}@if (!r.required) { · {{ 'doc.dueFrom' | t: { p: r.requiredFrom ?? ('doc.nextPhase' | t) } }} }</div></td>
-                  <td class="small"><app-doc-location [doc]="r" [folderUrl]="g.folderUrl" /></td>
+                  <td class="small"><app-doc-location [doc]="r" [folderUrl]="g.folderUrl" (edit)="pathDlg.open(r)" /></td>
                   <td><app-doc-state [doc]="r" /></td>
                   <td class="small">{{ r.checkedAt ? (r.checkedAt | date: 'dd/MM/yy' : undefined : i18n.locale()) : '—' }}</td>
                   <td class="actions">
@@ -92,6 +93,7 @@ interface Tile {
       }
     </dialog>
     <app-add-doc-dialog #addDoc [projects]="projectOptions()" (added)="docs.reload()" />
+    <app-doc-path-dialog #pathDlg (saved)="docs.reload()" />
   `,
 })
 export class DocsPage {

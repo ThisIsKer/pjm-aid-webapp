@@ -29,6 +29,8 @@ export interface SnapshotV2 {
   projects?: { id: string; suggestedStatus?: Rag; suggestedReason?: string }[];
   /** SharePoint project folder found by Claude (the standard "Progetti Clienti/<client>/<year>/<project>" folder). */
   projectFolders?: { projectId: string; folderUri: string; webUrl?: string }[];
+  /** Every file of a project folder (path below the folder), replacing the previous listing of that project. */
+  projectFiles?: { projectId: string; scannedAt?: string; files: { path: string; url: string; modifiedAt?: string; size?: number }[] }[];
   /**
    * Mail is incremental: only threads Claude looked at in this run (window since the last sync).
    * Threads not included are left untouched — they are closed by the user or updated by a later run.
@@ -78,7 +80,7 @@ const notIn = (ids: string[], col = 'id') => (ids.length ? `AND ${col} NOT IN ($
 export function importSnapshot(db: DatabaseSync, snap: SnapshotV2, hash: string | null = null): ImportResult {
   const warnings: string[] = [];
   const counts = {
-    epics: 0, projectsCreated: 0, phases: 0, projects: 0, projectFolders: 0, mailThreads: 0, docChecks: 0, calendarEvents: 0,
+    epics: 0, projectsCreated: 0, phases: 0, projects: 0, projectFolders: 0, mailThreads: 0, docChecks: 0, calendarEvents: 0, projectFiles: 0,
     closedPhases: 0, closedEpics: 0, deactivatedProjects: 0,
   };
 
@@ -195,11 +197,29 @@ export function importSnapshot(db: DatabaseSync, snap: SnapshotV2, hash: string 
     const updDoc = db.prepare(`
       UPDATE doc_requirements SET check_status = ?, found_url = ?, found_path = ?, found_modified_at = ?, checked_at = ?,
         updated_at = datetime('now') WHERE id = ?`);
+    const isPinned = db.prepare('SELECT pinned FROM doc_requirements WHERE id = ?');
     for (const c of snap.docChecks ?? []) {
+      // A location chosen by the user wins over Claude's match; it is refreshed from the file listing below.
+      const pin = isPinned.get(c.requirementId) as { pinned: number } | undefined;
+      if (pin?.pinned) { counts.docChecks++; continue; }
       const present = c.status === 'present' || c.status === 'outdated';
       if (Number(updDoc.run(c.status, present ? c.foundUrl ?? null : null, present ? c.foundPath ?? null : null,
         present ? c.modifiedAt ?? null : null, c.checkedAt ?? snap.generatedAt, c.requirementId).changes)) counts.docChecks++;
       else warnings.push(`docCheck: unknown requirement "${c.requirementId}"`);
+    }
+
+    // ---------- Project folder listings (folder browser) + refresh of user-chosen files ----------
+    for (const pf of snap.projectFiles ?? []) {
+      if (!db.prepare('SELECT 1 FROM projects WHERE id = ?').get(pf.projectId)) {
+        warnings.push(`projectFiles: unknown project "${pf.projectId}"`);
+        continue;
+      }
+      db.prepare('DELETE FROM project_files WHERE project_id = ?').run(pf.projectId);
+      const ins = db.prepare('INSERT OR REPLACE INTO project_files (project_id, path, url, modified_at, size) VALUES (?, ?, ?, ?, ?)');
+      for (const f of pf.files) ins.run(pf.projectId, f.path, f.url, f.modifiedAt ?? null, f.size ?? null);
+      db.prepare('UPDATE projects SET files_scanned_at = ? WHERE id = ?').run(pf.scannedAt ?? snap.generatedAt, pf.projectId);
+      counts.projectFiles += pf.files.length;
+      refreshPinnedDocs(db, pf.projectId, snap.generatedAt);
     }
 
     // ---------- Close what Claude no longer reports ----------
@@ -221,4 +241,23 @@ export function importSnapshot(db: DatabaseSync, snap: SnapshotV2, hash: string 
   });
 
   return { imported: true, counts, warnings };
+}
+
+const norm = (u: string) => { try { return decodeURIComponent(u).toLowerCase(); } catch { return u.toLowerCase(); } };
+
+/**
+ * Documents whose file the user chose: take the file's current version from the latest listing of the folder
+ * (a newer date → "updated"), or mark them missing when the file is no longer there.
+ */
+export function refreshPinnedDocs(db: DatabaseSync, projectId: string, checkedAt: string) {
+  const files = db.prepare('SELECT path, url, modified_at FROM project_files WHERE project_id = ?').all(projectId) as
+    { path: string; url: string; modified_at: string | null }[];
+  const pinned = db.prepare('SELECT id, found_url, found_path FROM doc_requirements WHERE project_id = ? AND pinned = 1').all(projectId) as
+    { id: string; found_url: string | null; found_path: string | null }[];
+  const upd = db.prepare(`UPDATE doc_requirements SET check_status = ?, found_modified_at = COALESCE(?, found_modified_at), checked_at = ?,
+    updated_at = datetime('now') WHERE id = ?`);
+  for (const d of pinned) {
+    const f = files.find((x) => (d.found_url && norm(x.url) === norm(d.found_url)) || (d.found_path && norm(x.path) === norm(d.found_path)));
+    upd.run(f ? 'present' : 'missing', f?.modified_at ?? null, checkedAt, d.id);
+  }
 }

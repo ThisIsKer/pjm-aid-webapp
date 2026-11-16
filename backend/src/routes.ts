@@ -240,6 +240,59 @@ export function apiRouter(db: DatabaseSync): Router {
     res.status(201).json(toApi(db.prepare('SELECT * FROM doc_requirements WHERE id = ?').get(id)));
   });
 
+  /** Files of the project's SharePoint folder, as listed by the last documentation check (folder browser). */
+  r.get('/projects/:id/files', (req, res) => {
+    const p = db.prepare('SELECT sharepoint_url, files_scanned_at FROM projects WHERE id = ?').get(param(req, 'id')) as
+      { sharepoint_url: string | null; files_scanned_at: string | null } | undefined;
+    if (!p) return notFound(res);
+    res.json({
+      folderUrl: p.sharepoint_url, scannedAt: p.files_scanned_at,
+      files: toApiList(db.prepare('SELECT path, url, modified_at, size FROM project_files WHERE project_id = ? ORDER BY path').all(param(req, 'id'))),
+    });
+  });
+
+  /**
+   * The user chooses where a document is: a file from the folder listing, a path below the project folder, or a link.
+   * The location is pinned (Claude's matching no longer changes it) and confirmed (OK) for the file's current version.
+   */
+  r.put('/docs/:id/location', (req, res) => {
+    const id = param(req, 'id');
+    const row = db.prepare(`SELECT d.project_id, p.sharepoint_url FROM doc_requirements d JOIN projects p ON p.id = d.project_id
+      WHERE d.id = ?`).get(id) as { project_id: string; sharepoint_url: string | null } | undefined;
+    if (!row) return notFound(res);
+    const input = String((req.body as { location?: string }).location ?? '').trim();
+    if (!input) return res.status(400).json({ error: 'location is required (a path below the project folder or a link)' });
+    let url: string;
+    let path: string | null;
+    if (/^https?:\/\//i.test(input)) {
+      url = input.replace(/ /g, '%20');
+      path = null;
+    } else {
+      if (!row.sharepoint_url) return res.status(400).json({ error: 'The project has no SharePoint folder: paste a full link instead' });
+      path = input.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      url = `${row.sharepoint_url.replace(/\/+$/, '')}/${path.split('/').map((s) => encodeURIComponent(s)).join('/')}`;
+    }
+    const files = db.prepare('SELECT path, url, modified_at FROM project_files WHERE project_id = ?').all(row.project_id) as
+      { path: string; url: string; modified_at: string | null }[];
+    const n = (u: string) => { try { return decodeURIComponent(u).toLowerCase(); } catch { return u.toLowerCase(); } };
+    const f = files.find((x) => n(x.url) === n(url) || (path && n(x.path) === n(path)));
+    if (f) { url = f.url; path = f.path; }
+    const modifiedAt = f?.modified_at ?? null;
+    const now = new Date().toISOString();
+    db.prepare(`UPDATE doc_requirements SET pinned = 1, check_status = 'present', found_url = ?, found_path = ?, found_modified_at = ?,
+      checked_at = ?, confirmed_at = ?, confirmed_ref = ?, updated_at = datetime('now') WHERE id = ?`)
+      .run(url, path, modifiedAt, now, now, docRef(url, modifiedAt), id);
+    res.json(toApi(db.prepare('SELECT * FROM doc_requirements WHERE id = ?').get(id)));
+  });
+
+  /** Back to Claude's automatic detection (next documentation check). */
+  r.delete('/docs/:id/location', (req, res) => {
+    const changes = db.prepare(`UPDATE doc_requirements SET pinned = 0, check_status = 'unknown', found_url = NULL, found_path = NULL,
+      found_modified_at = NULL, confirmed_at = NULL, confirmed_ref = NULL, updated_at = datetime('now') WHERE id = ?`).run(param(req, 'id')).changes;
+    if (!changes) return notFound(res);
+    res.json(toApi(db.prepare('SELECT * FROM doc_requirements WHERE id = ?').get(param(req, 'id'))));
+  });
+
   r.patch('/docs/:id', (req, res) => {
     const body = req.body as Record<string, unknown>;
     if (typeof body['confirmed'] === 'boolean') {

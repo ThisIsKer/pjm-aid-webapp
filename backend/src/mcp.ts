@@ -220,6 +220,13 @@ server.registerTool('pjm_confirm_doc', {
 }, tool(async ({ requirementId, confirmed }: { requirementId: string; confirmed: boolean }) =>
   api(`/docs/${encodeURIComponent(requirementId)}`, { method: 'PATCH', body: { confirmed } })));
 
+server.registerTool('pjm_set_doc_location', {
+  title: 'Set where a document is',
+  description: 'Sets the file of a documentation requirement: a path below the project SharePoint folder (e.g. "3. Analisi/Analisi v2.docx") or a full link. The choice is kept over Claude\'s automatic matching and counts as confirmed (OK). clear=true goes back to automatic detection.',
+  inputSchema: { requirementId: z.string(), location: z.string().optional(), clear: z.boolean().default(false) },
+}, tool(async ({ requirementId, location, clear }: { requirementId: string; location?: string; clear: boolean }) =>
+  api(`/docs/${encodeURIComponent(requirementId)}/location`, clear ? { method: 'DELETE' } : { method: 'PUT', body: { location } })));
+
 server.registerTool('pjm_sync_status', {
   title: 'Sync status',
   description: 'When the board was last synced with Jira/Outlook/SharePoint, and the last "Sync now" run.',

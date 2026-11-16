@@ -283,3 +283,28 @@ td.actions { white-space: nowrap; text-align: right; }
 td.actions button + button { margin-left: 6px; }
 button.ok-btn.on { background: var(--green-bg); border-color: var(--green); color: var(--green); }
 button.ok-btn:hover { border-color: var(--green); color: var(--green); }
+
+/* ---------- Document location (pencil + folder browser) ---------- */
+.doc-loc { display: flex; align-items: flex-start; gap: 6px; min-width: 210px; }
+.doc-loc-body { flex: 1; min-width: 0; overflow-wrap: break-word; }
+.icon-btn { border: 1px solid transparent; background: none; padding: 3px 4px; line-height: 0; color: var(--muted); border-radius: 6px; }
+.icon-btn:hover { border-color: var(--border); color: var(--accent); }
+.red-text { color: var(--red); }
+.path-dialog { width: 680px; }
+.path-dialog h2 { margin: 0 0 10px; }
+.path-dialog .small-seg { margin-bottom: 10px; }
+.path-dialog .path-filter { width: 100%; margin-bottom: 8px; }
+.path-dialog .crumbs { margin-bottom: 6px; color: var(--muted); }
+.path-dialog .crumbs .link { padding: 0 2px; }
+.file-list { list-style: none; margin: 0 0 8px; padding: 0; border: 1px solid var(--border); border-radius: 8px; height: 320px; overflow: auto; }
+.file-list li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.file-list li:last-child { border-bottom: 0; }
+.file-list li:hover { background: var(--surface-2); }
+.file-list li .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.file-list li.folder .ico { color: var(--amber); }
+.file-list li.file .ico { color: var(--muted); }
+.file-list li.selected { background: var(--accent); color: var(--accent-text); }
+.file-list li.selected .muted, .file-list li.selected .ico { color: var(--accent-text); }
+.file-list li.empty-row { cursor: default; }
+.form-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.form-label input { font-size: 14px; }

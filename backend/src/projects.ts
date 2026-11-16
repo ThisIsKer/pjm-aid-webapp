@@ -65,6 +65,7 @@ export function loadProjects(db: DatabaseSync, opts: { all?: boolean; id?: strin
     const folder = (p['sharepointUrl'] as string | null) ?? null;
     const docs = (docsByProject.get(String(p['id'])) ?? []).map((d) => ({
       ...d, required: docRequired(d, cp, p['phase'] as string | null), state: docState(d),
+      pinned: !!d.pinned,
       foundPath: d.foundPath ?? (d.foundUrl ? relativePath(d.foundUrl, folder) : null),
     }));
     const due = docs.filter((d) => d.required && !d.waived);
@@ -91,6 +92,7 @@ export type DocRow = {
   repository: string; locationHint: string | null; checkStatus: string; foundUrl: string | null;
   checkedAt: string | null; waived: boolean; fromTemplate: boolean;
   foundPath: string | null; foundModifiedAt: string | null; confirmedAt: string | null; confirmedRef: string | null;
+  pinned: boolean;
 };
 
 /** What the user confirmed with OK: this file at this version. */
