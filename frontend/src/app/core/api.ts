@@ -67,6 +67,14 @@ export class Api {
     return firstValueFrom(this.http.patch<TodoTask>(`/api/todo/${encodeURIComponent(id)}`, body));
   }
 
+  saveAutoTodos(enabled: boolean) {
+    return firstValueFrom(this.http.put<{ enabled: boolean; created: number; moved: number }>('/api/settings/autotodo', { enabled }));
+  }
+
+  runAutoTodos() {
+    return firstValueFrom(this.http.post<{ created: number; moved: number }>('/api/todo/auto/run', {}));
+  }
+
   deleteTask(id: string) {
     return firstValueFrom(this.http.delete<{ ok: boolean }>(`/api/todo/${encodeURIComponent(id)}`));
   }

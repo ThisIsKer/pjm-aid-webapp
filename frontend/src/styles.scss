@@ -425,3 +425,7 @@ button.ok-btn:hover { border-color: var(--green); color: var(--green); }
 .u-warning { box-shadow: inset 3px 0 0 var(--amber); }
 .todo-list li { padding-left: 8px; }
 .todo-due.soon { color: var(--amber-text); border-color: var(--amber); }
+
+.badge.auto { background: var(--note-bg); color: var(--accent); margin-left: 4px; }
+.auto-rules { width: 100%; margin-top: 8px; }
+.auto-rules td, .auto-rules th { padding: 4px 6px; }

@@ -58,6 +58,7 @@ import { byDueDate, todayIso, todoUrgency } from '../../core/todo-urgency';
                 @case ('critical') { <span class="badge red">{{ 'rag.red' | t }}</span> }
                 @case ('warning') { <span class="badge amber">{{ 'rag.amber' | t }}</span> }
               }
+              @if (t.origin === 'auto') { <span class="badge auto" [title]="t.notes ?? ''">{{ 'todo.auto' | t }}</span> }
               @if (t.projectId) { <a class="badge" [routerLink]="['/projects', t.projectId]">{{ t.projectName ?? t.projectId }}</a> }
               <button class="icon-btn star" [class.on]="t.importance === 'high'" (click)="update(t, { importance: t.importance === 'high' ? 'normal' : 'high' })"
                 [title]="'todo.important' | t">★</button>

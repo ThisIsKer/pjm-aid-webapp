@@ -7,7 +7,10 @@ type Dict = Record<string, string>;
 const IT: Dict = {
   'nav.dashboard': 'Dashboard', 'nav.projects': 'Progetti', 'nav.mail': 'Mail da gestire', 'nav.docs': 'Documentazione',
   'lang.label': 'Lingua',
-  'nav.todo': 'To-do', 'nav.menu': 'Menu', 'nav.close': 'Chiudi menu',
+  'nav.todo': 'To-do', 'nav.menu': 'Menu', 'nav.close': 'Chiudi menu', 'todo.auto': 'auto',
+  'auto.todoTitle': 'Attività automatiche da Jira', 'auto.todoHelp': 'Per i progetti di cui sei PM, quando una fase Jira si avvicina l\'app aggiunge al to-do le attività qui sotto, con scadenza alla data della fase. Ogni attività viene creata una sola volta per progetto; se Jira sposta la fase, la scadenza la segue finché non la modifichi tu. Le regole si possono cambiare con "autoTodos" in data/seed.json.',
+  'auto.todoUse': 'Crea le attività automaticamente', 'auto.todoRun': 'Controlla ora', 'auto.todoDone': '{c} create, {m} spostate',
+  'auto.todoTask': 'Attività', 'auto.todoWhen': 'Quando', 'auto.todoBeforeStart': '{n} giorni prima dell\'inizio', 'auto.todoBeforeEnd': '{n} giorni prima della fine',
   'todo.openPage': 'Tutte →', 'todo.quickPh': 'Nuova attività…', 'todo.nCritical': '{n} scadute', 'todo.nWarning': '{n} in scadenza',
   'todo.noDue': 'senza scadenza', 'todo.none': 'Nessuna attività aperta.',
   'todo.title': 'To-do', 'todo.newPh': 'Nuova attività… (Invio per aggiungere)', 'todo.due': 'Scadenza', 'todo.project': 'Progetto',
@@ -136,7 +139,10 @@ const IT: Dict = {
 const EN: Dict = {
   'nav.dashboard': 'Dashboard', 'nav.projects': 'Projects', 'nav.mail': 'Mail to answer', 'nav.docs': 'Documentation',
   'lang.label': 'Language',
-  'nav.todo': 'To-do', 'nav.menu': 'Menu', 'nav.close': 'Close menu',
+  'nav.todo': 'To-do', 'nav.menu': 'Menu', 'nav.close': 'Close menu', 'todo.auto': 'auto',
+  'auto.todoTitle': 'Automatic tasks from Jira', 'auto.todoHelp': 'For the projects you manage, when a Jira phase gets close the app adds the tasks below to the to-do list, due on the phase date. Each task is created once per project; if Jira moves the phase, the due date follows it until you change it. Rules can be changed with "autoTodos" in data/seed.json.',
+  'auto.todoUse': 'Create the tasks automatically', 'auto.todoRun': 'Check now', 'auto.todoDone': '{c} created, {m} moved',
+  'auto.todoTask': 'Task', 'auto.todoWhen': 'When', 'auto.todoBeforeStart': '{n} days before the start', 'auto.todoBeforeEnd': '{n} days before the end',
   'todo.openPage': 'All →', 'todo.quickPh': 'New task…', 'todo.nCritical': '{n} overdue', 'todo.nWarning': '{n} due soon',
   'todo.noDue': 'no due date', 'todo.none': 'No open tasks.',
   'todo.title': 'To-do', 'todo.newPh': 'New task… (Enter to add)', 'todo.due': 'Due date', 'todo.project': 'Project',

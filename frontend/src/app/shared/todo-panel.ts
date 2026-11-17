@@ -38,7 +38,8 @@ import { byDueDate, todayIso, todoUrgency } from '../core/todo-urgency';
           <li [class]="'u-' + (urgency(t) ?? 'none')">
             <input type="checkbox" class="todo-check" (change)="complete(t)" [title]="'todo.complete' | t" />
             <div class="what">
-              <div class="title">@if (t.importance === 'high') { <span class="star-on">★</span> }{{ t.title }}</div>
+              <div class="title">@if (t.importance === 'high') { <span class="star-on">★</span> }{{ t.title }}
+                @if (t.origin === 'auto') { <span class="badge auto" [title]="t.notes ?? ''">{{ 'todo.auto' | t }}</span> }</div>
               <div class="small muted">
                 @if (t.dueDate) { {{ t.dueDate | date: 'EEE d/MM' : undefined : i18n.locale() }} } @else { {{ 'todo.noDue' | t }} }
                 @if (t.projectId) { · <a [routerLink]="['/projects', t.projectId]">{{ t.projectName }}</a> }

@@ -200,16 +200,28 @@ One list ordered by due date (no date last, important first on the same day); ne
 tasks are **Critical** and tasks due within 2 days (today included) **Warning** (`core/todo-urgency.ts`), with a red /
 amber mark; the same list appears on the dashboard.
 
+**Automatic to-dos from Jira** — `backend/src/autotodo.ts`. For active projects where Sebastiano is PM, each rule
+(phase(s), title with `{project}`, anchor = phase start or end, days before) creates a to-do once the anchor is ≤ 14
+days away, due on the anchor date, linked to the project, marked *auto*, with a note naming the Jira phases. Several
+phases in a rule (Implementazione + Test interni) count from the earliest start. Each rule fires once per project
+(`auto_todo_log`, so a deleted task does not come back); while the task is open and its due date untouched it follows
+the phase when Jira moves it. Phases whose anchor is more than 7 days in the past are skipped (no flood for old
+phases). Runs after every snapshot import, at start and every hour; on/off and "Check now" in Settings, rules
+replaceable with `"autoTodos"` in `data/seed.json`. Default rules: Analisi → analysis documents, analysis meetings;
+Implementazione / Test interni → use cases, check with the implementation team, testbook; UAT → test cases, share
+testbook, issue list, first UAT meeting; Live → go-live date, check issue list; Post GoLive → post go-live issue list,
+end-of-hypercare communication (14 days before the end).
+
 **`data/registry.json`** — written by the backend after every import and every change made in the UI; the skill
 stages it to know projects, current phases, SharePoint folders, the checklist with `required` flags, open mail
 threads and the last sync time.
 
-## 6. Database schema (v10)
+## 6. Database schema (v11)
 
 `projects` · `project_groups` · `project_files` · `todo_lists` · `todo_tasks` · `jira_epics` · `deadlines` (+ view `v_deadlines` resolving each phase's project through its epic) ·
 `mail_threads` · `calendar_events` · `doc_requirements` · `doc_template` · `sync_runs` · `sync_jobs` — see `backend/src/db.ts`.
 Migrations are append-only and tracked with `PRAGMA user_version` (v3 adds `projects.sharepoint_folder_uri`,
-`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`; v8 adds `project_files`, `projects.files_scanned_at`, `doc_requirements.pinned`; v9 adds `app_settings`, `projects.files_source`, `doc_template.keywords`; v10 adds `todo_tasks` (and `todo_lists`, unused)). Requirement id = `<projectId>--<slug(title)>`, which is the id
+`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`; v8 adds `project_files`, `projects.files_scanned_at`, `doc_requirements.pinned`; v9 adds `app_settings`, `projects.files_source`, `doc_template.keywords`; v10 adds `todo_tasks` (and `todo_lists`, unused); v11 adds `auto_todo_log`). Requirement id = `<projectId>--<slug(title)>`, which is the id
 Claude reports back in `docChecks`.
 
 ## 7. Snapshot contract v2 (`data/inbox/snapshot.json`)
@@ -269,6 +281,7 @@ Full example: `docs/examples/snapshot.example.json`.
 | PUT/DELETE | `/docs/:id/location` | `{ location }` path below the project folder or link → pinned + OK / back to automatic detection |
 | PATCH | `/docs/:id` | `{ confirmed }` OK / remove OK · `{ waived }` not needed · edit hint |
 | GET/POST | `/todo` | tasks (`?all=true` includes old completed ones) / add `{ title, dueDate?, notes?, importance?, projectId? }` |
+| GET/PUT | `/settings/autotodo` · POST `/todo/auto/run` | automatic to-dos: `{ enabled }` + rules · run now → `{ created, moved }` |
 | PATCH/DELETE | `/todo/:id` | edit `{ title?, dueDate?, notes?, importance?, projectId?, completed? }` / delete |
 | POST | `/sync/import?force=true` | import the snapshot now |
 | GET | `/sync/runs` | last 20 imports with counts and warnings |
@@ -325,4 +338,5 @@ Full example: `docs/examples/snapshot.example.json`.
 | 4h | Project page in four scrolling panels (no page scroll) | ✅ |
 | 4i | To-do list (in the app) | ✅ |
 | 4j | Collapsible navigation (logo rail), to-do column on the dashboard, to-do ordered by due date with Critical / Warning | ✅ |
+| 4k | Automatic to-dos created from the approaching Jira phases | ✅ |
 | 5 | Weekday-morning scheduled sync (daily Jira + mail + calendar, Monday + docs) | at the end |

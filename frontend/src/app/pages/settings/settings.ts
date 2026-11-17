@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Api } from '../../core/api';
 import { I18n, TPipe, type Lang } from '../../core/i18n';
-import type { AgentStatus, SpStatus } from '../../core/models';
+import type { AgentStatus, AutoTodoRule, SpStatus } from '../../core/models';
 import { SyncService } from '../../core/sync';
 import { Theme, type ThemeChoice } from '../../core/theme';
 import { SyncButton } from '../../shared/sync-button';
@@ -96,6 +96,35 @@ import { SyncProgress } from '../../shared/sync-progress';
       </div>
 
       <div class="card">
+        <h2>{{ 'auto.todoTitle' | t }}</h2>
+        <p class="help small muted">{{ 'auto.todoHelp' | t }}</p>
+        @if (autoTodo.value(); as a) {
+          <div class="setting">
+            <div>
+              <div class="label">{{ 'auto.todoUse' | t }}</div>
+              <div class="help">@if (autoMessage(); as m) { {{ m }} }</div>
+            </div>
+            <div class="sync-now">
+              <button (click)="runAuto()" [disabled]="!a.enabled">{{ 'auto.todoRun' | t }}</button>
+              <div class="segmented">
+                <button [class.on]="a.enabled" (click)="saveAuto(true)">{{ 'common.on' | t }}</button>
+                <button [class.on]="!a.enabled" (click)="saveAuto(false)">{{ 'common.off' | t }}</button>
+              </div>
+            </div>
+          </div>
+          <table class="auto-rules small">
+            <thead><tr><th>{{ 'col.phase' | t }}</th><th>{{ 'auto.todoTask' | t }}</th><th>{{ 'auto.todoWhen' | t }}</th></tr></thead>
+            <tbody>
+              @for (r of a.rules; track r.id) {
+                <tr><td>{{ r.phases.join(' / ') }}</td><td>{{ r.title }}</td>
+                  <td class="muted">{{ (r.anchor === 'start' ? 'auto.todoBeforeStart' : 'auto.todoBeforeEnd') | t: { n: r.daysBefore } }}</td></tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+
+      <div class="card">
         <h2>{{ 'set.appearance' | t }}</h2>
         <div class="setting">
           <div>
@@ -147,6 +176,19 @@ export class SettingsPage {
   protected readonly themes: ThemeChoice[] = ['light', 'dark', 'system'];
   protected readonly importMessage = signal<string | null>(null);
   protected readonly sp = httpResource<SpStatus>(() => '/api/settings/sharepoint');
+  protected readonly autoTodo = httpResource<{ enabled: boolean; rules: AutoTodoRule[] }>(() => '/api/settings/autotodo');
+  protected readonly autoMessage = signal<string | null>(null);
+
+  protected async saveAuto(enabled: boolean) {
+    const r = await this.api.saveAutoTodos(enabled);
+    this.autoTodo.reload();
+    this.autoMessage.set(enabled ? this.i18n.t('auto.todoDone', { c: r.created, m: r.moved }) : null);
+  }
+
+  protected async runAuto() {
+    const r = await this.api.runAutoTodos();
+    this.autoMessage.set(this.i18n.t('auto.todoDone', { c: r.created, m: r.moved }));
+  }
   protected readonly spMessage = signal<string | null>(null);
   protected readonly scanning = signal(false);
 

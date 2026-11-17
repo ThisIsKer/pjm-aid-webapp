@@ -9,6 +9,7 @@ import { seedIfEmpty, syncDocTemplate } from './seed.ts';
 import { importSnapshotIfPresent } from './snapshot.ts';
 import { apiRouter } from './routes.ts';
 import { watchLocalSharePoint } from './localsp.ts';
+import { generateAutoTodos, loadAutoTodoRules } from './autotodo.ts';
 
 const db = openDb(config.dbFile);
 seedIfEmpty(db, config.seedFile);
@@ -22,9 +23,21 @@ function tryImport() {
   } catch (err) {
     console.error('[sync] Snapshot import failed:', (err as Error).message);
   }
+  runAutoTodos();
   exportRegistry(db);
 }
+
+/** To-dos that come with approaching Jira phases (rules in autotodo.ts or "autoTodos" in data/seed.json). */
+function runAutoTodos() {
+  try {
+    const r = generateAutoTodos(db, loadAutoTodoRules(config.seedFile));
+    if (r.created || r.moved) console.log(`[todo] automatic to-dos: ${r.created} created, ${r.moved} moved`);
+  } catch (err) {
+    console.error('[todo] automatic to-dos failed:', (err as Error).message);
+  }
+}
 tryImport();
+setInterval(runAutoTodos, 60 * 60_000).unref(); // days pass even without a sync
 
 // Auto-import whenever Claude writes a new data/inbox/snapshot.json (debounced: the file may be written in chunks).
 let importTimer: NodeJS.Timeout | undefined;

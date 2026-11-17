@@ -243,6 +243,14 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX todo_tasks_due ON todo_tasks (status, due_date);
   `,
+  /* v11 — automatic to-dos from the Jira planning: one entry per project and rule (fires once) */ `
+  CREATE TABLE auto_todo_log (
+    key        TEXT PRIMARY KEY,
+    task_id    TEXT,
+    anchor     TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  `,
 ];
 
 export function openDb(file: string): DatabaseSync {

@@ -189,7 +189,11 @@ export interface Meeting {
 export interface TodoTask {
   id: string; title: string; notes: string | null; dueDate: string | null; importance: 'normal' | 'high' | string;
   status: 'notStarted' | 'completed' | string; completedAt: string | null; projectId: string | null; projectName: string | null;
+  /** app = added by you, auto = created from the Jira planning */
+  origin?: 'app' | 'auto' | string;
 }
+
+export interface AutoTodoRule { id: string; phases: string[]; title: string; anchor: 'start' | 'end'; daysBefore: number }
 
 export interface WeekPlan {
   today: string; from: string; to: string; capacityHours: number; activityHours: number; meetingHours: number;

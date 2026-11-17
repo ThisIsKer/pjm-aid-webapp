@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { getSpSettings, rootAvailable, saveSpSettings, scanLocalSharePoint } from './localsp.ts';
 import { loadTask, loadTasks } from './todo.ts';
+import { autoTodosEnabled, generateAutoTodos, loadAutoTodoRules, setAutoTodosEnabled } from './autotodo.ts';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { agentStatus, currentOrLastJob, recentJobs, startSync, type SyncMode, autoSync } from './agent.ts';
 import { config } from './config.ts';
@@ -372,6 +373,15 @@ export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void })
       id);
     res.json(loadTask(db, id));
   });
+  // Automatic to-dos from the Jira planning
+  r.get('/settings/autotodo', (_req, res) => res.json({ enabled: autoTodosEnabled(db), rules: loadAutoTodoRules(config.seedFile) }));
+  r.put('/settings/autotodo', (req, res) => {
+    setAutoTodosEnabled(db, (req.body as { enabled?: boolean }).enabled !== false);
+    const run = generateAutoTodos(db, loadAutoTodoRules(config.seedFile));
+    res.json({ enabled: autoTodosEnabled(db), rules: loadAutoTodoRules(config.seedFile), ...run });
+  });
+  r.post('/todo/auto/run', (_req, res) => res.json(generateAutoTodos(db, loadAutoTodoRules(config.seedFile))));
+
   r.delete('/todo/:id', (req, res) => {
     if (!db.prepare('DELETE FROM todo_tasks WHERE id = ?').run(param(req, 'id')).changes) return notFound(res);
     res.json({ ok: true });
