@@ -220,6 +220,29 @@ const MIGRATIONS: string[] = [
   ALTER TABLE projects ADD COLUMN files_source TEXT;
   ALTER TABLE doc_template ADD COLUMN keywords TEXT;
   `,
+  /* v10 — to-do list (local tasks + Microsoft To Do via Power Automate) */ `
+  CREATE TABLE todo_lists (id TEXT PRIMARY KEY, name TEXT NOT NULL, wellknown TEXT);
+  CREATE TABLE todo_tasks (
+    id               TEXT PRIMARY KEY,
+    todo_id          TEXT UNIQUE,
+    list_id          TEXT,
+    list_name        TEXT,
+    title            TEXT NOT NULL,
+    notes            TEXT,
+    due_date         TEXT,
+    importance       TEXT NOT NULL DEFAULT 'normal',
+    status           TEXT NOT NULL DEFAULT 'notStarted',
+    completed_at     TEXT,
+    project_id       TEXT REFERENCES projects(id) ON DELETE SET NULL,
+    origin           TEXT NOT NULL DEFAULT 'app',
+    sync_state       TEXT NOT NULL DEFAULT 'local',
+    sent_at          TEXT,
+    todo_modified_at TEXT,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX todo_tasks_due ON todo_tasks (status, due_date);
+  `,
 ];
 
 export function openDb(file: string): DatabaseSync {

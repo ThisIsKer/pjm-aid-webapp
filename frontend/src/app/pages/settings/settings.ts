@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Api } from '../../core/api';
 import { I18n, TPipe, type Lang } from '../../core/i18n';
-import type { AgentStatus, SpStatus } from '../../core/models';
+import type { AgentStatus, SpStatus, TodoBridge, TodoData } from '../../core/models';
 import { SyncService } from '../../core/sync';
 import { Theme, type ThemeChoice } from '../../core/theme';
 import { SyncButton } from '../../shared/sync-button';
@@ -96,6 +96,43 @@ import { SyncProgress } from '../../shared/sync-progress';
       </div>
 
       <div class="card">
+        <h2>{{ 'td.title' | t }}</h2>
+        <p class="help small muted">{{ 'td.help' | t }}</p>
+        @if (td.value(); as b) {
+          <div class="setting">
+            <div>
+              <div class="label">{{ 'td.use' | t }}</div>
+              <div class="help">
+                @if (!b.enabled) { {{ 'td.off' | t }} }
+                @else if (b.connected) {
+                  <span class="green-text">{{ 'td.ok' | t: { n: b.lists } }}</span>
+                  @if (b.exportedAt) { · {{ 'todo.lastImport' | t: { d: (b.exportedAt | date: 'dd/MM HH:mm' : undefined : i18n.locale()) } }} }
+                } @else if (b.folder) { {{ 'td.waiting' | t }} }
+                @else { <span class="red-text">{{ 'td.noFolder' | t }}</span> }
+              </div>
+            </div>
+            <div class="segmented">
+              <button [class.on]="b.enabled" (click)="saveTd({ enabled: true })">{{ 'common.on' | t }}</button>
+              <button [class.on]="!b.enabled" (click)="saveTd({ enabled: false })">{{ 'common.off' | t }}</button>
+            </div>
+          </div>
+          <div class="setting stack">
+            <label class="form-label">{{ 'td.folder' | t }} <input [value]="b.bridgeDir" #tdDir /></label>
+            @if (todoLists.value()?.lists?.length) {
+              <label class="form-label">{{ 'td.defaultList' | t }}
+                <select (change)="tdListSel.set($any($event.target).value)">
+                  @for (l of todoLists.value()!.lists; track l.id) { <option [value]="l.id" [selected]="(b.defaultListId || defaultTdList()) === l.id">{{ l.name }}</option> }
+                </select>
+              </label>
+            }
+            <div class="sync-now">
+              <button class="primary" (click)="saveTd({ bridgeDir: tdDir.value, defaultListId: tdListSel() ?? b.defaultListId })">{{ 'common.save' | t }}</button>
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="card">
         <h2>{{ 'set.appearance' | t }}</h2>
         <div class="setting">
           <div>
@@ -147,6 +184,15 @@ export class SettingsPage {
   protected readonly themes: ThemeChoice[] = ['light', 'dark', 'system'];
   protected readonly importMessage = signal<string | null>(null);
   protected readonly sp = httpResource<SpStatus>(() => '/api/settings/sharepoint');
+  protected readonly td = httpResource<TodoBridge>(() => '/api/settings/todo');
+  protected readonly tdListSel = signal<string | null>(null);
+  protected readonly todoLists = httpResource<TodoData>(() => '/api/todo');
+  protected readonly defaultTdList = () => this.todoLists.value()?.lists.find((l) => l.wellknown === 'defaultList')?.id ?? '';
+
+  protected async saveTd(body: Partial<Pick<TodoBridge, 'enabled' | 'bridgeDir' | 'defaultListId'>>) {
+    this.td.set(await this.api.saveTodoSettings(body));
+    this.todoLists.reload();
+  }
   protected readonly spMessage = signal<string | null>(null);
   protected readonly scanning = signal(false);
 

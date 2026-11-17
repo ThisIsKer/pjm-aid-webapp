@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { getSpSettings, rootAvailable, saveSpSettings, scanLocalSharePoint } from './localsp.ts';
+import { bridgeStatus, getTodoSettings, loadTask, loadTasks, prepareBridge, queueTodoWrite, saveTodoSettings } from './todo.ts';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { agentStatus, currentOrLastJob, recentJobs, startSync, type SyncMode, autoSync } from './agent.ts';
 import { config } from './config.ts';
@@ -50,7 +52,7 @@ const lastSync = (db: DatabaseSync) => {
   return last ? toApi(last) : null;
 };
 
-export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void }): Router {
+export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void }, todo?: { refresh: () => void }): Router {
   const r = Router();
 
   r.get('/health', (_req, res) => res.json({ ok: true, today: isoToday(), lastSync: lastSync(db) }));
@@ -340,6 +342,70 @@ export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void })
   r.post('/sharepoint/scan', (_req, res) => {
     const result = scanLocalSharePoint(db);
     res.json({ ...result, status: spStatus() });
+  });
+
+  // ---------- To-do (local + Microsoft To Do) ----------
+  const todoData = (all: boolean) => ({
+    tasks: loadTasks(db, all),
+    lists: toApiList(db.prepare('SELECT * FROM todo_lists ORDER BY (wellknown = \'defaultList\') DESC, name').all()),
+    bridge: bridgeStatus(db),
+  });
+  r.get('/todo', (req, res) => res.json(todoData(req.query['all'] === 'true')));
+  r.post('/todo', (req, res) => {
+    const b = req.body as { title?: string; dueDate?: string | null; notes?: string | null; importance?: string; projectId?: string | null; listId?: string | null };
+    if (!b.title?.trim()) return res.status(400).json({ error: 'title is required' });
+    const id = randomUUID();
+    const list = b.listId ? db.prepare('SELECT name FROM todo_lists WHERE id = ?').get(b.listId) as { name: string } | undefined : undefined;
+    db.prepare(`INSERT INTO todo_tasks (id, list_id, list_name, title, notes, due_date, importance, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, list ? b.listId! : null, list?.name ?? null, b.title.trim(), b.notes?.trim() || null, b.dueDate || null,
+        b.importance === 'high' ? 'high' : 'normal', b.projectId || null);
+    queueTodoWrite(db, id);
+    res.status(201).json(loadTask(db, id));
+  });
+  r.patch('/todo/:id', (req, res) => {
+    const id = param(req, 'id');
+    const cur = db.prepare('SELECT * FROM todo_tasks WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    if (!cur) return notFound(res);
+    const b = req.body as { title?: string; dueDate?: string | null; notes?: string | null; importance?: string; projectId?: string | null; completed?: boolean };
+    const next = {
+      title: b.title !== undefined ? b.title.trim() || String(cur['title']) : String(cur['title']),
+      due_date: b.dueDate !== undefined ? b.dueDate || null : cur['due_date'],
+      notes: b.notes !== undefined ? b.notes?.trim() || null : cur['notes'],
+      importance: b.importance !== undefined ? (b.importance === 'high' ? 'high' : 'normal') : cur['importance'],
+      status: b.completed !== undefined ? (b.completed ? 'completed' : 'notStarted') : cur['status'],
+      project_id: b.projectId !== undefined ? b.projectId || null : cur['project_id'],
+    };
+    const completedAt = next.status === 'completed' ? (cur['completed_at'] ?? new Date().toISOString().slice(0, 10)) : null;
+    db.prepare(`UPDATE todo_tasks SET title = ?, due_date = ?, notes = ?, importance = ?, status = ?, completed_at = ?, project_id = ?,
+      updated_at = datetime('now') WHERE id = ?`).run(next.title, next.due_date as string | null, next.notes as string | null,
+      next.importance as string, next.status as string, completedAt as string | null, next.project_id as string | null, id);
+    // Only what To Do knows is written back (the project link stays in the app).
+    const synced = ['title', 'due_date', 'notes', 'importance', 'status'].some((k) => (next as Record<string, unknown>)[k] !== cur[k]);
+    if (synced) queueTodoWrite(db, id);
+    res.json(loadTask(db, id));
+  });
+  r.post('/todo/:id/resend', (req, res) => {
+    if (!queueTodoWrite(db, param(req, 'id'))) return res.status(409).json({ error: 'Microsoft To Do is not connected' });
+    res.json(loadTask(db, param(req, 'id')));
+  });
+  r.delete('/todo/:id', (req, res) => {
+    const t = db.prepare('SELECT todo_id FROM todo_tasks WHERE id = ?').get(param(req, 'id')) as { todo_id: string | null } | undefined;
+    if (!t) return notFound(res);
+    if (t.todo_id) return res.status(409).json({ error: 'This task is in Microsoft To Do: complete it, or delete it in To Do' });
+    db.prepare('DELETE FROM todo_tasks WHERE id = ?').run(param(req, 'id'));
+    res.json({ ok: true });
+  });
+  r.post('/todo/refresh', (_req, res) => {
+    todo?.refresh();
+    res.json(todoData(false));
+  });
+  r.get('/settings/todo', (_req, res) => res.json(bridgeStatus(db)));
+  r.put('/settings/todo', (req, res) => {
+    const b = req.body as { enabled?: boolean; bridgeDir?: string; defaultListId?: string | null };
+    saveTodoSettings(db, b);
+    prepareBridge(getTodoSettings(db));
+    todo?.refresh();
+    res.json(bridgeStatus(db));
   });
 
   // ---------- Sync (Claude snapshot import) ----------

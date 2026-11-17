@@ -227,6 +227,39 @@ server.registerTool('pjm_set_doc_location', {
 }, tool(async ({ requirementId, location, clear }: { requirementId: string; location?: string; clear: boolean }) =>
   api(`/docs/${encodeURIComponent(requirementId)}/location`, clear ? { method: 'DELETE' } : { method: 'PUT', body: { location } })));
 
+server.registerTool('pjm_list_tasks', {
+  title: 'To-do list',
+  description: "Sebastiano's to-do list in PJM aid (Microsoft To Do tasks plus tasks added in the app), open ones first, with due date, list, project and importance. all=true includes tasks completed long ago.",
+  inputSchema: { all: z.boolean().default(false) },
+  annotations: { readOnlyHint: true },
+}, tool(async ({ all }: { all: boolean }) => {
+  const d = await api(`/todo?all=${all}`);
+  return { connectedToMicrosoftToDo: d.bridge.connected, lists: d.lists.map((l: any) => l.name),
+    tasks: d.tasks.map((t: any) => ({ id: t.id, title: t.title, due: t.dueDate, status: t.status, important: t.importance === 'high',
+      list: t.listName, project: t.projectName, notes: t.notes })) };
+}));
+
+server.registerTool('pjm_add_task', {
+  title: 'Add a to-do',
+  description: 'Adds a task to the to-do list (and to Microsoft To Do when connected). Optional due date YYYY-MM-DD, project (id, epic key or name), important flag, notes.',
+  inputSchema: { title: z.string().min(1), due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), project: z.string().optional(),
+    important: z.boolean().default(false), notes: z.string().optional() },
+}, tool(async ({ title, due, project, important, notes }: { title: string; due?: string; project?: string; important: boolean; notes?: string }) => {
+  let projectId: string | null = null;
+  if (project) {
+    const all = await api<any[]>('/projects?all=true');
+    const p = all.find((x) => x.id === project || x.jiraKeys?.includes(project)) ?? all.find((x) => x.name.toLowerCase().includes(project.toLowerCase()));
+    projectId = p?.id ?? null;
+  }
+  return api('/todo', { method: 'POST', body: { title, dueDate: due ?? null, projectId, importance: important ? 'high' : 'normal', notes: notes ?? null } });
+}));
+
+server.registerTool('pjm_complete_task', {
+  title: 'Complete a to-do',
+  description: 'Marks a task as done (or reopens it with done=false). Use the id from pjm_list_tasks.',
+  inputSchema: { id: z.string(), done: z.boolean().default(true) },
+}, tool(async ({ id, done }: { id: string; done: boolean }) => api(`/todo/${encodeURIComponent(id)}`, { method: 'PATCH', body: { completed: done } })));
+
 server.registerTool('pjm_sync_status', {
   title: 'Sync status',
   description: 'When the board was last synced with Jira/Outlook/SharePoint, and the last "Sync now" run.',

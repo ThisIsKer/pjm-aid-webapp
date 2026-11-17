@@ -19,6 +19,7 @@ export class App {
     { path: '/dashboard', label: 'nav.dashboard' },
     { path: '/projects', label: 'nav.projects' },
     { path: '/mail', label: 'nav.mail' },
+    { path: '/todo', label: 'nav.todo' },
     { path: '/docs', label: 'nav.docs' },
   ];
 
