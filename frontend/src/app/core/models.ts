@@ -185,17 +185,11 @@ export interface Meeting {
   webLink: string | null; attendeeCount: number; client: string | null; projectIds: string[];
 }
 
+/** A task of the to-do list (kept in the app). */
 export interface TodoTask {
-  id: string; todoId: string | null; listId: string | null; listName: string | null; title: string; notes: string | null;
-  dueDate: string | null; importance: 'normal' | 'high' | string; status: string; completedAt: string | null;
-  projectId: string | null; projectName: string | null; origin: 'app' | 'todo'; syncState: 'local' | 'pending' | 'synced';
+  id: string; title: string; notes: string | null; dueDate: string | null; importance: 'normal' | 'high' | string;
+  status: 'notStarted' | 'completed' | string; completedAt: string | null; projectId: string | null; projectName: string | null;
 }
-export interface TodoList { id: string; name: string; wellknown: string | null }
-export interface TodoBridge {
-  enabled: boolean; bridgeDir: string; defaultListId: string | null; folder: boolean; exportedAt: string | null;
-  lists: number; connected: boolean; outbox: number; pending: number;
-}
-export interface TodoData { tasks: TodoTask[]; lists: TodoList[]; bridge: TodoBridge }
 
 export interface WeekPlan {
   today: string; from: string; to: string; capacityHours: number; activityHours: number; meetingHours: number;

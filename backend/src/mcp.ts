@@ -229,19 +229,18 @@ server.registerTool('pjm_set_doc_location', {
 
 server.registerTool('pjm_list_tasks', {
   title: 'To-do list',
-  description: "Sebastiano's to-do list in PJM aid (Microsoft To Do tasks plus tasks added in the app), open ones first, with due date, list, project and importance. all=true includes tasks completed long ago.",
+  description: "Sebastiano's to-do list in PJM aid, open ones first, with due date, project, importance and notes. all=true includes tasks completed long ago.",
   inputSchema: { all: z.boolean().default(false) },
   annotations: { readOnlyHint: true },
 }, tool(async ({ all }: { all: boolean }) => {
   const d = await api(`/todo?all=${all}`);
-  return { connectedToMicrosoftToDo: d.bridge.connected, lists: d.lists.map((l: any) => l.name),
-    tasks: d.tasks.map((t: any) => ({ id: t.id, title: t.title, due: t.dueDate, status: t.status, important: t.importance === 'high',
-      list: t.listName, project: t.projectName, notes: t.notes })) };
+  return { tasks: d.tasks.map((t: any) => ({ id: t.id, title: t.title, due: t.dueDate, status: t.status, important: t.importance === 'high',
+    project: t.projectName, notes: t.notes })) };
 }));
 
 server.registerTool('pjm_add_task', {
   title: 'Add a to-do',
-  description: 'Adds a task to the to-do list (and to Microsoft To Do when connected). Optional due date YYYY-MM-DD, project (id, epic key or name), important flag, notes.',
+  description: 'Adds a task to the to-do list. Optional due date YYYY-MM-DD, project (id, epic key or name), important flag, notes.',
   inputSchema: { title: z.string().min(1), due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), project: z.string().optional(),
     important: z.boolean().default(false), notes: z.string().optional() },
 }, tool(async ({ title, due, project, important, notes }: { title: string; due?: string; project?: string; important: boolean; notes?: string }) => {

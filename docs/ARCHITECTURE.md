@@ -192,14 +192,9 @@ their due day. Meeting hours per day come from the synced calendar (today and th
 Jira status labels in the UI: red → **Critical / Critico**, amber → **Warning / Attenzione**, green → **Ok**,
 grey → n/a.
 
-**To-do list** — `backend/src/todo.ts`, page *To-do*. Claude's Microsoft 365 connector has no task permission and the
-new Outlook has no local API, so Microsoft To Do is reached through two Power Automate flows and the OneDrive folder
-`PJM aid` (setup: [todo-power-automate.md](todo-power-automate.md)): flow 1 writes all lists and to-dos to
-`todo-export.json` every 10 minutes (imported on change, watched + every 2 minutes); the app writes one request file
-per change to `outbox/` and flow 2 creates / updates the to-do and deletes the file. Tasks created in the app stay
-*pending* until the export shows them (linked by list + title), then *synced*; a change made in the app wins until To
-Do reflects it. To-dos deleted in To Do disappear; completed ones are kept 14 days. The project link of a task is
-app-only. Without the flows tasks stay in the app (*local*) and are sent once To Do is connected.
+**To-do list** — page *To-do*, table `todo_tasks` (`backend/src/todo.ts`). Tasks live only in the app: title, note,
+due date, importance (★) and an optional project; grouped by due date (overdue, today, tomorrow, next 7 days, later,
+no date) with search and a project filter; completed ones are hidden (*show completed* lists those of the last 14 days).
 
 **`data/registry.json`** — written by the backend after every import and every change made in the UI; the skill
 stages it to know projects, current phases, SharePoint folders, the checklist with `required` flags, open mail
@@ -210,7 +205,7 @@ threads and the last sync time.
 `projects` · `project_groups` · `project_files` · `todo_lists` · `todo_tasks` · `jira_epics` · `deadlines` (+ view `v_deadlines` resolving each phase's project through its epic) ·
 `mail_threads` · `calendar_events` · `doc_requirements` · `doc_template` · `sync_runs` · `sync_jobs` — see `backend/src/db.ts`.
 Migrations are append-only and tracked with `PRAGMA user_version` (v3 adds `projects.sharepoint_folder_uri`,
-`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`; v8 adds `project_files`, `projects.files_scanned_at`, `doc_requirements.pinned`; v9 adds `app_settings`, `projects.files_source`, `doc_template.keywords`; v10 adds `todo_lists`, `todo_tasks`). Requirement id = `<projectId>--<slug(title)>`, which is the id
+`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`; v8 adds `project_files`, `projects.files_scanned_at`, `doc_requirements.pinned`; v9 adds `app_settings`, `projects.files_source`, `doc_template.keywords`; v10 adds `todo_tasks` (and `todo_lists`, unused)). Requirement id = `<projectId>--<slug(title)>`, which is the id
 Claude reports back in `docChecks`.
 
 ## 7. Snapshot contract v2 (`data/inbox/snapshot.json`)
@@ -269,10 +264,8 @@ Full example: `docs/examples/snapshot.example.json`.
 | POST | `/sharepoint/scan` | read the synced folder now |
 | PUT/DELETE | `/docs/:id/location` | `{ location }` path below the project folder or link → pinned + OK / back to automatic detection |
 | PATCH | `/docs/:id` | `{ confirmed }` OK / remove OK · `{ waived }` not needed · edit hint |
-| GET/POST | `/todo` | tasks (`?all=true` includes old completed), To Do lists, bridge status / add `{ title, dueDate?, notes?, importance?, projectId?, listId? }` |
-| PATCH/DELETE | `/todo/:id` | edit `{ title?, dueDate?, notes?, importance?, projectId?, completed? }` (written back to To Do) / delete an app-only task |
-| POST | `/todo/:id/resend` · `/todo/refresh` | re-send a pending task · re-read the export now |
-| GET/PUT | `/settings/todo` | `{ enabled, bridgeDir, defaultListId }` + status (connected, lists, last export, pending) |
+| GET/POST | `/todo` | tasks (`?all=true` includes old completed ones) / add `{ title, dueDate?, notes?, importance?, projectId? }` |
+| PATCH/DELETE | `/todo/:id` | edit `{ title?, dueDate?, notes?, importance?, projectId?, completed? }` / delete |
 | POST | `/sync/import?force=true` | import the snapshot now |
 | GET | `/sync/runs` | last 20 imports with counts and warnings |
 | GET | `/sync/agent?refresh=true` | is Claude Code available (`claude --version`) |
@@ -326,5 +319,5 @@ Full example: `docs/examples/snapshot.example.json`.
 | 4f | SharePoint read from the OneDrive-synced folder on the PC: folder discovery, live file lists, local document checks | ✅ |
 | 4g | Weekly view of activities; project search on the Documentation page | ✅ |
 | 4h | Project page in four scrolling panels (no page scroll) | ✅ |
-| 4i | To-do list with Microsoft To Do two-way sync (Power Automate + OneDrive) | ✅ |
+| 4i | To-do list (in the app) | ✅ |
 | 5 | Weekday-morning scheduled sync (daily Jira + mail + calendar, Monday + docs) | at the end |

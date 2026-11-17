@@ -220,7 +220,7 @@ const MIGRATIONS: string[] = [
   ALTER TABLE projects ADD COLUMN files_source TEXT;
   ALTER TABLE doc_template ADD COLUMN keywords TEXT;
   `,
-  /* v10 — to-do list (local tasks + Microsoft To Do via Power Automate) */ `
+  /* v10 — to-do list (todo_lists is unused: the Microsoft To Do link was dropped) */ `
   CREATE TABLE todo_lists (id TEXT PRIMARY KEY, name TEXT NOT NULL, wellknown TEXT);
   CREATE TABLE todo_tasks (
     id               TEXT PRIMARY KEY,

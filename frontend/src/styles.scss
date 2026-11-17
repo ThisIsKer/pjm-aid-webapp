@@ -379,4 +379,9 @@ button.ok-btn:hover { border-color: var(--green); color: var(--green); }
 .icon-btn.star { font-size: 15px; line-height: 1; padding: 2px 4px; color: var(--muted); }
 .icon-btn.star.on { color: var(--amber); }
 .icon-btn-space { display: inline-block; width: 26px; }
-.todo-list li > .icon-btn:last-child, .todo-list .icon-btn-space { width: 26px; text-align: center; flex-shrink: 0; }
+.todo-list li > .icon-btn:last-child { width: 26px; text-align: center; flex-shrink: 0; }
+.todo-notes { width: 100%; border: 1px solid transparent; background: transparent; padding: 1px 4px; color: var(--muted); }
+.todo-notes:hover { border-color: var(--border); }
+.todo-notes:focus { border-color: var(--accent); background: var(--surface); color: var(--text); outline: none; }
+.todo-notes::placeholder { color: transparent; }
+.todo-list li:hover .todo-notes::placeholder, .todo-notes:focus::placeholder { color: var(--muted); }

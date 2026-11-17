@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import type { Deadline, DocRequirement, MailThread, Project, ProjectFiles, ProjectGroup, SpStatus, SyncJob, TodoBridge, TodoTask } from './models';
+import type { Deadline, DocRequirement, MailThread, Project, ProjectFiles, ProjectGroup, SpStatus, SyncJob, TodoTask } from './models';
 
 /** Write operations. Reads use httpResource() directly in the pages. */
 @Injectable({ providedIn: 'root' })
@@ -59,7 +59,7 @@ export class Api {
     return firstValueFrom(this.http.delete<DocRequirement>(`/api/docs/${encodeURIComponent(id)}/location`));
   }
 
-  addTask(body: { title: string; dueDate?: string | null; notes?: string | null; importance?: string; projectId?: string | null; listId?: string | null }) {
+  addTask(body: { title: string; dueDate?: string | null; notes?: string | null; importance?: string; projectId?: string | null }) {
     return firstValueFrom(this.http.post<TodoTask>('/api/todo', body));
   }
 
@@ -69,18 +69,6 @@ export class Api {
 
   deleteTask(id: string) {
     return firstValueFrom(this.http.delete<{ ok: boolean }>(`/api/todo/${encodeURIComponent(id)}`));
-  }
-
-  resendTask(id: string) {
-    return firstValueFrom(this.http.post<TodoTask>(`/api/todo/${encodeURIComponent(id)}/resend`, {}));
-  }
-
-  refreshTodo() {
-    return firstValueFrom(this.http.post('/api/todo/refresh', {}));
-  }
-
-  saveTodoSettings(body: Partial<Pick<TodoBridge, 'enabled' | 'bridgeDir' | 'defaultListId'>>) {
-    return firstValueFrom(this.http.put<TodoBridge>('/api/settings/todo', body));
   }
 
   linkEpic(key: string, projectId: string) {

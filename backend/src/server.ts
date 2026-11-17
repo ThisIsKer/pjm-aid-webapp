@@ -9,7 +9,6 @@ import { seedIfEmpty, syncDocTemplate } from './seed.ts';
 import { importSnapshotIfPresent } from './snapshot.ts';
 import { apiRouter } from './routes.ts';
 import { watchLocalSharePoint } from './localsp.ts';
-import { watchTodo } from './todo.ts';
 
 const db = openDb(config.dbFile);
 seedIfEmpty(db, config.seedFile);
@@ -38,8 +37,6 @@ fs.watch(path.dirname(config.snapshotFile), (_event, filename) => {
 
 // SharePoint "Progetti Clienti" synced by OneDrive on this PC: read file names/dates, follow changes.
 const sharepoint = watchLocalSharePoint(db, () => exportRegistry(db));
-// Microsoft To Do, through the Power Automate flows and the OneDrive folder "PJM aid".
-const todo = watchTodo(db, () => undefined);
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
@@ -48,7 +45,7 @@ app.use('/api', (req, res, next) => {
   if (req.method !== 'GET') res.on('finish', () => res.statusCode < 400 && exportRegistry(db));
   next();
 });
-app.use('/api', apiRouter(db, sharepoint, todo));
+app.use('/api', apiRouter(db, sharepoint));
 
 // Production mode: serve the built Angular app from the same port.
 if (fs.existsSync(config.frontendDist)) {
