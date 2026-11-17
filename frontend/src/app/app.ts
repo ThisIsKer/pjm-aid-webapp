@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { I18n, TPipe } from './core/i18n';
 import { SyncService } from './core/sync';
@@ -9,12 +9,15 @@ import { SyncOverlay } from './shared/sync-overlay';
   selector: 'app-root',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, TPipe, SyncOverlay],
   templateUrl: './app.html',
+  host: { '(document:keydown.escape)': 'navOpen.set(false)' },
 })
 export class App {
   protected readonly i18n = inject(I18n);
   /** Instantiated here so the saved theme is applied at startup. */
   private readonly theme = inject(Theme);
   protected readonly sync = inject(SyncService);
+  /** The navigation menu is hidden; the PJM aid logo opens it. */
+  protected readonly navOpen = signal(false);
   protected readonly nav = [
     { path: '/dashboard', label: 'nav.dashboard' },
     { path: '/projects', label: 'nav.projects' },

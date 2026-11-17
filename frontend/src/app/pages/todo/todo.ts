@@ -4,13 +4,12 @@ import { RouterLink } from '@angular/router';
 import { Api } from '../../core/api';
 import { I18n, TPipe } from '../../core/i18n';
 import type { Project, TodoTask } from '../../core/models';
+import { byDueDate, todayIso, todoUrgency } from '../../core/todo-urgency';
 
-type Group = 'overdue' | 'today' | 'tomorrow' | 'week' | 'later' | 'none' | 'done';
-const ORDER: Group[] = ['overdue', 'today', 'tomorrow', 'week', 'later', 'none', 'done'];
-const iso = (d: Date) => d.toLocaleDateString('sv-SE');
-const plus = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
-
-/** To-do list kept in the app: tasks with due date, importance and an optional project. */
+/**
+ * To-do list kept in the app, ordered by due date. Overdue tasks are marked critical, tasks due within the
+ * next 2 days warning (same labels as the Jira status).
+ */
 @Component({
   selector: 'app-todo',
   imports: [RouterLink, TPipe],
@@ -18,6 +17,8 @@ const plus = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); 
     <header class="page-head">
       <h1>{{ 'todo.title' | t }}</h1>
       <div class="meta">
+        @if (counts().critical) { <span class="badge red">{{ 'todo.nCritical' | t: { n: counts().critical } }}</span> }
+        @if (counts().warning) { <span class="badge amber">{{ 'todo.nWarning' | t: { n: counts().warning } }}</span> }
         <label class="small muted"><input type="checkbox" [checked]="showDone()" (change)="showDone.set(!showDone())" /> {{ 'todo.showDone' | t }}</label>
       </div>
     </header>
@@ -42,18 +43,21 @@ const plus = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); 
       <span class="small muted">{{ 'todo.count' | t: { n: openCount() } }}</span>
     </div>
 
-    @for (g of groups(); track g.key) {
-      <section class="card todo-group" [class]="'g-' + g.key">
-        <h2>{{ 'todo.group.' + g.key | t }} <span class="muted small">· {{ g.tasks.length }}</span></h2>
+    @if (tasks().length) {
+      <section class="card todo-group">
         <ul class="todo-list">
-          @for (t of g.tasks; track t.id) {
-            <li [class.done]="t.status === 'completed'">
+          @for (t of tasks(); track t.id) {
+            <li [class.done]="t.status === 'completed'" [class]="'u-' + (urgency(t) ?? 'none')">
               <input type="checkbox" class="todo-check" [checked]="t.status === 'completed'" (change)="toggleDone(t)" [title]="'todo.complete' | t" />
               <div class="todo-main">
                 <input class="todo-title" [value]="t.title" (change)="update(t, { title: $any($event.target).value })" />
                 <input class="todo-notes small" [value]="t.notes ?? ''" [placeholder]="'todo.notesPh' | t"
                   (change)="update(t, { notes: $any($event.target).value || null })" />
               </div>
+              @switch (urgency(t)) {
+                @case ('critical') { <span class="badge red">{{ 'rag.red' | t }}</span> }
+                @case ('warning') { <span class="badge amber">{{ 'rag.amber' | t }}</span> }
+              }
               @if (t.projectId) { <a class="badge" [routerLink]="['/projects', t.projectId]">{{ t.projectName ?? t.projectId }}</a> }
               <button class="icon-btn star" [class.on]="t.importance === 'high'" (click)="update(t, { importance: t.importance === 'high' ? 'normal' : 'high' })"
                 [title]="'todo.important' | t">★</button>
@@ -61,14 +65,14 @@ const plus = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); 
                 <option value="" [selected]="!t.projectId">—</option>
                 @for (p of projects(); track p.id) { <option [value]="p.id" [selected]="t.projectId === p.id">{{ p.name }}</option> }
               </select>
-              <input type="date" class="todo-due" [class.overdue]="g.key === 'overdue'" [value]="t.dueDate ?? ''"
-                (change)="update(t, { dueDate: $any($event.target).value || null })" />
+              <input type="date" class="todo-due" [class.overdue]="urgency(t) === 'critical'" [class.soon]="urgency(t) === 'warning'"
+                [value]="t.dueDate ?? ''" (change)="update(t, { dueDate: $any($event.target).value || null })" />
               <button class="icon-btn" (click)="remove(t)" [title]="'todo.delete' | t">✕</button>
             </li>
           }
         </ul>
       </section>
-    } @empty {
+    } @else {
       <div class="card empty">{{ (query() || projectFilter()) ? ('todo.noMatch' | t) : ('todo.empty' | t) }}</div>
     }
   `,
@@ -80,9 +84,10 @@ export class TodoPage {
   protected readonly data = httpResource<{ tasks: TodoTask[] }>(() => `/api/todo?all=${this.showDone()}`);
   private readonly projectsRes = httpResource<Project[]>(() => '/api/projects');
   protected readonly projects = computed(() => [...(this.projectsRes.value() ?? [])].sort((a, b) => a.name.localeCompare(b.name)));
+  protected readonly urgency = todoUrgency;
 
   protected readonly newTitle = signal('');
-  protected readonly newDue = signal('');
+  protected readonly newDue = signal(todayIso());
   protected readonly newProject = signal('');
   protected readonly query = signal('');
   protected readonly projectFilter = signal('');
@@ -91,28 +96,16 @@ export class TodoPage {
     const q = this.query().trim().toLowerCase();
     const pf = this.projectFilter();
     return (this.data.value()?.tasks ?? []).filter((t) =>
-      (!q || `${t.title} ${t.notes ?? ''} ${t.projectName ?? ''}`.toLowerCase().includes(q))
+      (this.showDone() || t.status !== 'completed')
+      && (!q || `${t.title} ${t.notes ?? ''} ${t.projectName ?? ''}`.toLowerCase().includes(q))
       && (!pf || (pf === '__none' ? !t.projectId : t.projectId === pf)));
   });
+  /** By due date (no date last); completed at the end. */
+  protected readonly tasks = computed(() => [...this.filtered()].sort(byDueDate));
   protected readonly openCount = computed(() => this.filtered().filter((t) => t.status !== 'completed').length);
-
-  /** Tasks grouped by due date: overdue, today, tomorrow, next 7 days, later, no date, completed. */
-  protected readonly groups = computed(() => {
-    const today = iso(new Date());
-    const tomorrow = plus(1);
-    const week = plus(7);
-    const by = new Map<Group, TodoTask[]>();
-    for (const t of this.filtered()) {
-      if (t.status === 'completed' && !this.showDone()) continue;
-      const g: Group = t.status === 'completed' ? 'done'
-        : !t.dueDate ? 'none'
-        : t.dueDate < today ? 'overdue'
-        : t.dueDate === today ? 'today'
-        : t.dueDate === tomorrow ? 'tomorrow'
-        : t.dueDate <= week ? 'week' : 'later';
-      by.set(g, [...(by.get(g) ?? []), t]);
-    }
-    return ORDER.filter((k) => by.has(k)).map((key) => ({ key, tasks: by.get(key)! }));
+  protected readonly counts = computed(() => {
+    const u = this.filtered().map(todoUrgency);
+    return { critical: u.filter((x) => x === 'critical').length, warning: u.filter((x) => x === 'warning').length };
   });
 
   protected async add() {
@@ -120,7 +113,7 @@ export class TodoPage {
     if (!title) return;
     await this.api.addTask({ title, dueDate: this.newDue() || null, projectId: this.newProject() || null });
     this.newTitle.set('');
-    this.newDue.set('');
+    this.newDue.set(todayIso());
     this.data.reload();
   }
 

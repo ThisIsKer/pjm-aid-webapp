@@ -7,7 +7,9 @@ type Dict = Record<string, string>;
 const IT: Dict = {
   'nav.dashboard': 'Dashboard', 'nav.projects': 'Progetti', 'nav.mail': 'Mail da gestire', 'nav.docs': 'Documentazione',
   'lang.label': 'Lingua',
-  'nav.todo': 'To-do',
+  'nav.todo': 'To-do', 'nav.menu': 'Menu', 'nav.close': 'Chiudi menu',
+  'todo.openPage': 'Tutte →', 'todo.quickPh': 'Nuova attività…', 'todo.nCritical': '{n} scadute', 'todo.nWarning': '{n} in scadenza',
+  'todo.noDue': 'senza scadenza', 'todo.none': 'Nessuna attività aperta.',
   'todo.title': 'To-do', 'todo.newPh': 'Nuova attività… (Invio per aggiungere)', 'todo.due': 'Scadenza', 'todo.project': 'Progetto',
   'todo.noProject': 'Nessun progetto', 'todo.allProjects': 'Tutti i progetti', 'todo.search': 'Cerca…', 'todo.count': '{n} aperte',
   'todo.showDone': 'mostra completate', 'todo.notesPh': 'Aggiungi una nota…', 'todo.complete': 'Completata', 'todo.important': 'Importante',
@@ -134,7 +136,9 @@ const IT: Dict = {
 const EN: Dict = {
   'nav.dashboard': 'Dashboard', 'nav.projects': 'Projects', 'nav.mail': 'Mail to answer', 'nav.docs': 'Documentation',
   'lang.label': 'Language',
-  'nav.todo': 'To-do',
+  'nav.todo': 'To-do', 'nav.menu': 'Menu', 'nav.close': 'Close menu',
+  'todo.openPage': 'All →', 'todo.quickPh': 'New task…', 'todo.nCritical': '{n} overdue', 'todo.nWarning': '{n} due soon',
+  'todo.noDue': 'no due date', 'todo.none': 'No open tasks.',
   'todo.title': 'To-do', 'todo.newPh': 'New task… (Enter to add)', 'todo.due': 'Due date', 'todo.project': 'Project',
   'todo.noProject': 'No project', 'todo.allProjects': 'All projects', 'todo.search': 'Search…', 'todo.count': '{n} open',
   'todo.showDone': 'show completed', 'todo.notesPh': 'Add a note…', 'todo.complete': 'Completed', 'todo.important': 'Important',

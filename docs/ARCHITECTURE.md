@@ -64,8 +64,10 @@ epic) become **contributor** projects. In the Projects page he can:
   shows one section per group (ungrouped last), and the dashboard's Projects panel shows group header rows and a
   group filter. Deleting a group leaves its projects ungrouped.
 
+The navigation menu is hidden: a narrow rail shows the PJM aid logo (click → the menu slides in) and the settings gear.
 The dashboard fits the window: KPIs on top and four panels (today's activities, today's meetings, projects,
-deadlines), each with its own scrollbar — the page itself never scrolls. The project page follows the same layout: Jira phases,
+deadlines), plus the to-do list as a full-height column on the right (quick add, open tasks by due date) — each
+with its own scrollbar, the page itself never scrolls. The project page follows the same layout: Jira phases,
 "My view" (status, phase override, SharePoint link, note, other deadlines), documentation (wide column) and mail. Sync controls (last sync, Sync now with its
 scope, import snapshot, daily auto-sync) live in **Settings**.
 
@@ -193,8 +195,10 @@ Jira status labels in the UI: red → **Critical / Critico**, amber → **Warnin
 grey → n/a.
 
 **To-do list** — page *To-do*, table `todo_tasks` (`backend/src/todo.ts`). Tasks live only in the app: title, note,
-due date, importance (★) and an optional project; grouped by due date (overdue, today, tomorrow, next 7 days, later,
-no date) with search and a project filter; completed ones are hidden (*show completed* lists those of the last 14 days).
+due date, importance (★) and an optional project; with search and a project filter; completed ones are hidden (*show completed* lists those of the last 14 days).
+One list ordered by due date (no date last, important first on the same day); new tasks default to today. Overdue
+tasks are **Critical** and tasks due within 2 days (today included) **Warning** (`core/todo-urgency.ts`), with a red /
+amber mark; the same list appears on the dashboard.
 
 **`data/registry.json`** — written by the backend after every import and every change made in the UI; the skill
 stages it to know projects, current phases, SharePoint folders, the checklist with `required` flags, open mail
@@ -320,4 +324,5 @@ Full example: `docs/examples/snapshot.example.json`.
 | 4g | Weekly view of activities; project search on the Documentation page | ✅ |
 | 4h | Project page in four scrolling panels (no page scroll) | ✅ |
 | 4i | To-do list (in the app) | ✅ |
+| 4j | Collapsible navigation (logo rail), to-do column on the dashboard, to-do ordered by due date with Critical / Warning | ✅ |
 | 5 | Weekday-morning scheduled sync (daily Jira + mail + calendar, Monday + docs) | at the end |
