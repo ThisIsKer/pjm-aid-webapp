@@ -28,6 +28,7 @@
             <h2>{{ p.isToday ? ('today.title' | t) : ('today.titleFor' | t: { d: (p.day | date: 'EEEE d/MM' : undefined : i18n.locale()) }) }}</h2>
             <div class="head-right">
               <span class="small muted">{{ 'today.load' | t: { a: p.activityHours, m: p.meetingHours, c: p.capacityHours } }}</span>
+              <button class="small" (click)="worklog.open()" [title]="'wl.title' | t">{{ 'wl.button' | t }}</button>
               <ng-container *ngTemplateOutlet="viewToggle" />
             </div>
           </div>
@@ -270,4 +271,5 @@
   </section>
 </div>
 <app-todo-panel />
+<app-worklog-dialog #worklog (logged)="reload()" />
 </div>

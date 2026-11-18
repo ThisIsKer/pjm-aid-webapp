@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { Api } from '../core/api';
 import { I18n, TPipe } from '../core/i18n';
 import type { TodoTask } from '../core/models';
+import { autoInfoText, taskTitle } from '../core/todo-text';
 import { byDueDate, todayIso, todoUrgency } from '../core/todo-urgency';
 
 /** Dashboard side panel: open to-dos by due date (overdue = critical, due soon = warning) with a quick add. */
@@ -38,8 +39,8 @@ import { byDueDate, todayIso, todoUrgency } from '../core/todo-urgency';
           <li [class]="'u-' + (urgency(t) ?? 'none')">
             <input type="checkbox" class="todo-check" (change)="complete(t)" [title]="'todo.complete' | t" />
             <div class="what">
-              <div class="title">@if (t.importance === 'high') { <span class="star-on">★</span> }{{ t.title }}
-                @if (t.origin === 'auto') { <span class="badge auto" [title]="t.notes ?? ''">{{ 'todo.auto' | t }}</span> }</div>
+              <div class="title">@if (t.importance === 'high') { <span class="star-on">★</span> }{{ label(t) }}
+                @if (t.origin === 'auto') { <span class="badge auto" [title]="autoInfo(t)">{{ 'todo.auto' | t }}</span> }</div>
               <div class="small muted">
                 @if (t.dueDate) { {{ t.dueDate | date: 'EEE d/MM' : undefined : i18n.locale() }} } @else { {{ 'todo.noDue' | t }} }
                 @if (t.projectId) { · <a [routerLink]="['/projects', t.projectId]">{{ t.projectName }}</a> }
@@ -64,6 +65,8 @@ export class TodoPanel {
   protected readonly title = signal('');
   protected readonly due = signal(todayIso());
   protected readonly urgency = todoUrgency;
+  protected readonly label = (t: TodoTask) => taskTitle(t, this.i18n.lang());
+  protected readonly autoInfo = (t: TodoTask) => autoInfoText(this.i18n, t);
 
   protected readonly open = computed(() => (this.data.value()?.tasks ?? []).filter((t) => t.status !== 'completed').sort(byDueDate));
   protected readonly counts = computed(() => {

@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import type { Deadline, DocRequirement, MailThread, Project, ProjectFiles, ProjectGroup, SpStatus, SyncJob, TodoTask } from './models';
+import type { Deadline, DocRequirement, MailThread, Project, ProjectFiles, ProjectGroup, SpStatus, SyncJob, TodoTask, JiraStatus, WorklogProposal } from './models';
 
 /** Write operations. Reads use httpResource() directly in the pages. */
 @Injectable({ providedIn: 'root' })
@@ -69,6 +69,27 @@ export class Api {
 
   saveAutoTodos(enabled: boolean) {
     return firstValueFrom(this.http.put<{ enabled: boolean; created: number; moved: number }>('/api/settings/autotodo', { enabled }));
+  }
+
+  createProjectAutoTodos(projectId: string) {
+    return firstValueFrom(this.http.post<{ created: number; moved: number }>(`/api/projects/${encodeURIComponent(projectId)}/autotodos`, {}));
+  }
+
+  deleteProjectAutoTodos(projectId: string) {
+    return firstValueFrom(this.http.delete<{ deleted: number }>(`/api/projects/${encodeURIComponent(projectId)}/autotodos`));
+  }
+
+  worklogProposal(date: string) {
+    return firstValueFrom(this.http.get<WorklogProposal>(`/api/worklog?date=${date}`));
+  }
+
+  logWork(date: string, entries: { key: string; hours: number; comment?: string }[]) {
+    return firstValueFrom(this.http.post<{ results: { key: string; hours: number; ok: boolean; error?: string }[]; loggedHours: number }>(
+      '/api/worklog', { date, entries }));
+  }
+
+  saveJira(body: { site?: string; email?: string; token?: string; tempoToken?: string; clear?: boolean; clearTempo?: boolean }) {
+    return firstValueFrom(this.http.put<JiraStatus>('/api/settings/jira', body));
   }
 
   runAutoTodos() {

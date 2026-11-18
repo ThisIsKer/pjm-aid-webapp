@@ -16,6 +16,13 @@
       <div class="meta">
         <span class="badge {{ p.jiraRag }}">{{ 'col.jira' | t }}: {{ 'rag.' + p.jiraRag | t }}</span>
         <span>{{ reason(p) }}</span>
+        <span class="auto-actions">
+          @if (autoMsg(); as m) { <span class="small">{{ m }}</span> }
+          <button (click)="createAuto(p)" [disabled]="autoBusy()" [title]="'pd.autoCreateHelp' | t">{{ 'pd.autoCreate' | t }}</button>
+          @if (p.autoTodos.total) {
+            <button class="danger" (click)="deleteAuto(p)" [disabled]="autoBusy()" [title]="'pd.autoDeleteHelp' | t">{{ 'pd.autoDelete' | t: { n: p.autoTodos.total } }}</button>
+          }
+        </span>
         <button (click)="toggleActive()">{{ (p.active ? 'pd.hide' : 'pd.show') | t }}</button>
       </div>
     </header>

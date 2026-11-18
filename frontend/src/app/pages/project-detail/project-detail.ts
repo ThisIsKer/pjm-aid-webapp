@@ -56,6 +56,33 @@ export class ProjectDetailPage {
   }
 
   protected reason = (p: ProjectDetail) => jiraReason(this.i18n, p);
+
+  // Automatic to-dos of this project (rules: Settings → Automatic tasks from Jira)
+  protected readonly autoMsg = signal<string | null>(null);
+  protected readonly autoBusy = signal(false);
+
+  protected async createAuto(p: ProjectDetail) {
+    this.autoBusy.set(true);
+    try {
+      const r = await this.api.createProjectAutoTodos(p.id);
+      this.autoMsg.set(r.created ? this.i18n.t('pd.autoCreated', { n: r.created }) : this.i18n.t('pd.autoNothing'));
+      this.project.reload();
+    } finally {
+      this.autoBusy.set(false);
+    }
+  }
+
+  protected async deleteAuto(p: ProjectDetail) {
+    if (!confirm(this.i18n.t('pd.autoConfirmDelete', { n: p.autoTodos.total, p: p.name }))) return;
+    this.autoBusy.set(true);
+    try {
+      const r = await this.api.deleteProjectAutoTodos(p.id);
+      this.autoMsg.set(this.i18n.t('pd.autoDeleted', { n: r.deleted }));
+      this.project.reload();
+    } finally {
+      this.autoBusy.set(false);
+    }
+  }
   protected jiraUrl = (key: string) => `https://archivagroup.atlassian.net/browse/${key}`;
 
   protected async save() {

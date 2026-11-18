@@ -211,17 +211,41 @@ replaceable with `"autoTodos"` in `data/seed.json`. Default rules: Analisi → a
 Implementazione / Test interni → use cases, check with the implementation team, testbook; UAT → test cases, share
 testbook, issue list, first UAT meeting; Live → go-live date, check issue list; Post GoLive → post go-live issue list,
 end-of-hypercare communication (14 days before the end).
+Titles are localised at display time: the task stores the rule id (`auto_rule`), the phase info (`auto_info`) and the
+project name, and the API returns `autoTitles` { it, en } (rules carry `titles`; renaming a task keeps your title).
+On the **project page**: *Create automatic to-dos* runs the rules for that project right away — every coming phase
+(no 14-day wait), also for projects where Sebastiano is not the PM, re-creating deleted ones without duplicating
+existing ones — and *Delete automatic to-dos (n)* deletes all of them (completed too); deleted ones are not re-created
+by the hourly run. The same two buttons are on each row of the **Projects** page (column *Automatic to-dos*).
+
+**Jira work log** — `backend/src/jira.ts`, `shared/worklog-dialog.ts`. *Log hours* on the dashboard's day view opens a
+dialog with the day's Jira activities (date selectable). Proposed hours = the hours planned for the day on each issue
+(as in the day plan), net of what is already logged on that issue that day; the total turns amber when it exceeds the
+working day minus meetings. Each row can be unticked, changed (quarter hours) and given a description;
+*Log in Jira* writes one work log per issue, results show per row (✓ / error), each call is kept in `worklog_entries`
+and the local remaining estimate drops right away (the next sync brings Jira's figure).
+- **Through Tempo** (when a Tempo API token is saved): `POST https://api.tempo.io/4/worklogs` with the issue's numeric
+  id, my accountId, date, start 09:00, time spent, description (default "Working on issue KEY") and the remaining
+  estimate lowered by the time spent — the same entry Tempo's "Log time" dialog makes. "Already logged" comes from
+  `GET /4/worklogs/user/{accountId}?from=&to=`, so it includes everything in my Tempo timesheet for the day.
+- **Straight to Jira** (no Tempo token): `POST /rest/api/3/issue/{key}/worklog?adjustEstimate=auto`; Tempo copies it.
+  Here "already logged" only sees logs made through Jira (Tempo-made ones are authored by "Tempo Timesheets").
+Authentication (Settings → Jira): Atlassian e-mail + **Jira API token** (always needed: identifies me via
+`/rest/api/3/myself` and resolves issue keys to ids through `/rest/api/3/search/jql`) and the **Tempo API token**
+(Tempo → Settings → API integration), checked by reading today's Tempo work logs. Both live only in `app_settings` in
+the local database (`data/`, git-ignored) and are never returned by the API. Claude is not involved: logging is
+deterministic and instant, and works without a sync.
 
 **`data/registry.json`** — written by the backend after every import and every change made in the UI; the skill
 stages it to know projects, current phases, SharePoint folders, the checklist with `required` flags, open mail
 threads and the last sync time.
 
-## 6. Database schema (v11)
+## 6. Database schema (v13)
 
 `projects` · `project_groups` · `project_files` · `todo_lists` · `todo_tasks` · `jira_epics` · `deadlines` (+ view `v_deadlines` resolving each phase's project through its epic) ·
 `mail_threads` · `calendar_events` · `doc_requirements` · `doc_template` · `sync_runs` · `sync_jobs` — see `backend/src/db.ts`.
 Migrations are append-only and tracked with `PRAGMA user_version` (v3 adds `projects.sharepoint_folder_uri`,
-`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`; v8 adds `project_files`, `projects.files_scanned_at`, `doc_requirements.pinned`; v9 adds `app_settings`, `projects.files_source`, `doc_template.keywords`; v10 adds `todo_tasks` (and `todo_lists`, unused); v11 adds `auto_todo_log`). Requirement id = `<projectId>--<slug(title)>`, which is the id
+`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`; v8 adds `project_files`, `projects.files_scanned_at`, `doc_requirements.pinned`; v9 adds `app_settings`, `projects.files_source`, `doc_template.keywords`; v10 adds `todo_tasks` (and `todo_lists`, unused); v11 adds `auto_todo_log`; v12 adds `todo_tasks.auto_rule / auto_info / auto_project`; v13 adds `worklog_entries`). Requirement id = `<projectId>--<slug(title)>`, which is the id
 Claude reports back in `docChecks`.
 
 ## 7. Snapshot contract v2 (`data/inbox/snapshot.json`)
@@ -282,6 +306,10 @@ Full example: `docs/examples/snapshot.example.json`.
 | PATCH | `/docs/:id` | `{ confirmed }` OK / remove OK · `{ waived }` not needed · edit hint |
 | GET/POST | `/todo` | tasks (`?all=true` includes old completed ones) / add `{ title, dueDate?, notes?, importance?, projectId? }` |
 | GET/PUT | `/settings/autotodo` · POST `/todo/auto/run` | automatic to-dos: `{ enabled }` + rules · run now → `{ created, moved }` |
+| POST/DELETE | `/projects/:id/autotodos` | create the project's automatic to-dos now → `{ created }` / delete them all → `{ deleted }` |
+| GET/PUT | `/settings/jira` | Jira work log: `{ site, email, hasToken, connected, displayName, hasTempoToken, tempoConnected }` / save `{ email?, token?, tempoToken?, site? }` and verify, or `{ clear: true }` · `{ clearTempo: true }` |
+| GET | `/worklog?date=` | the day's Jira activities with planned, already logged and proposed hours; `via` tempo / jira, hours already logged that day |
+| POST | `/worklog` | `{ date, entries: [{ key, hours, comment? }] }` → one Jira work log each → `{ results: [{ key, hours, ok, error? }], loggedHours }` |
 | PATCH/DELETE | `/todo/:id` | edit `{ title?, dueDate?, notes?, importance?, projectId?, completed? }` / delete |
 | POST | `/sync/import?force=true` | import the snapshot now |
 | GET | `/sync/runs` | last 20 imports with counts and warnings |
@@ -339,4 +367,7 @@ Full example: `docs/examples/snapshot.example.json`.
 | 4i | To-do list (in the app) | ✅ |
 | 4j | Collapsible navigation (logo rail), to-do column on the dashboard, to-do ordered by due date with Critical / Warning | ✅ |
 | 4k | Automatic to-dos created from the approaching Jira phases | ✅ |
+| 4l | Localised automatic to-dos; create / delete them from the project page | ✅ |
+| 4m | Automatic to-do buttons on each project row; Jira work log with a personal API token | ✅ |
+| 4n | Work log through Tempo (Tempo API token): Tempo-native entries, already-logged hours from the Tempo timesheet | ✅ |
 | 5 | Weekday-morning scheduled sync (daily Jira + mail + calendar, Monday + docs) | at the end |

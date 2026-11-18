@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { Api } from '../../core/api';
 import { I18n, TPipe } from '../../core/i18n';
 import type { Project, TodoTask } from '../../core/models';
+import { autoInfoText, taskTitle } from '../../core/todo-text';
 import { byDueDate, todayIso, todoUrgency } from '../../core/todo-urgency';
 
 /**
@@ -50,7 +51,8 @@ import { byDueDate, todayIso, todoUrgency } from '../../core/todo-urgency';
             <li [class.done]="t.status === 'completed'" [class]="'u-' + (urgency(t) ?? 'none')">
               <input type="checkbox" class="todo-check" [checked]="t.status === 'completed'" (change)="toggleDone(t)" [title]="'todo.complete' | t" />
               <div class="todo-main">
-                <input class="todo-title" [value]="t.title" (change)="update(t, { title: $any($event.target).value })" />
+                <input class="todo-title" [value]="title(t)" (change)="update(t, { title: $any($event.target).value })" />
+                @if (t.autoInfo) { <div class="todo-auto-info small muted">{{ autoInfo(t) }}</div> }
                 <input class="todo-notes small" [value]="t.notes ?? ''" [placeholder]="'todo.notesPh' | t"
                   (change)="update(t, { notes: $any($event.target).value || null })" />
               </div>
@@ -58,7 +60,7 @@ import { byDueDate, todayIso, todoUrgency } from '../../core/todo-urgency';
                 @case ('critical') { <span class="badge red">{{ 'rag.red' | t }}</span> }
                 @case ('warning') { <span class="badge amber">{{ 'rag.amber' | t }}</span> }
               }
-              @if (t.origin === 'auto') { <span class="badge auto" [title]="t.notes ?? ''">{{ 'todo.auto' | t }}</span> }
+              @if (t.origin === 'auto') { <span class="badge auto" [title]="autoInfo(t)">{{ 'todo.auto' | t }}</span> }
               @if (t.projectId) { <a class="badge" [routerLink]="['/projects', t.projectId]">{{ t.projectName ?? t.projectId }}</a> }
               <button class="icon-btn star" [class.on]="t.importance === 'high'" (click)="update(t, { importance: t.importance === 'high' ? 'normal' : 'high' })"
                 [title]="'todo.important' | t">★</button>
@@ -86,6 +88,8 @@ export class TodoPage {
   private readonly projectsRes = httpResource<Project[]>(() => '/api/projects');
   protected readonly projects = computed(() => [...(this.projectsRes.value() ?? [])].sort((a, b) => a.name.localeCompare(b.name)));
   protected readonly urgency = todoUrgency;
+  protected readonly title = (t: TodoTask) => taskTitle(t, this.i18n.lang());
+  protected readonly autoInfo = (t: TodoTask) => autoInfoText(this.i18n, t);
 
   protected readonly newTitle = signal('');
   protected readonly newDue = signal(todayIso());
@@ -98,7 +102,7 @@ export class TodoPage {
     const pf = this.projectFilter();
     return (this.data.value()?.tasks ?? []).filter((t) =>
       (this.showDone() || t.status !== 'completed')
-      && (!q || `${t.title} ${t.notes ?? ''} ${t.projectName ?? ''}`.toLowerCase().includes(q))
+      && (!q || `${this.title(t)} ${t.notes ?? ''} ${t.projectName ?? ''}`.toLowerCase().includes(q))
       && (!pf || (pf === '__none' ? !t.projectId : t.projectId === pf)));
   });
   /** By due date (no date last); completed at the end. */

@@ -8,6 +8,7 @@ import { FlagBadges } from '../../shared/flag-badges';
 import { RagDot } from '../../shared/rag-dot';
 import { SyncService } from '../../core/sync';
 import { TodoPanel } from '../../shared/todo-panel';
+import { WorklogDialog } from '../../shared/worklog-dialog';
 
 const SEVERITY: Record<Rag, number> = { red: 0, amber: 1, green: 2, grey: 3 };
 const FILTER_KEY = 'pjm.dashGroup';
@@ -18,7 +19,7 @@ type ProjectRow =
 
 @Component({
   selector: 'app-dashboard',
-  imports: [DatePipe, NgTemplateOutlet, RouterLink, RagDot, FlagBadges, TPipe, TodoPanel],
+  imports: [DatePipe, NgTemplateOutlet, RouterLink, RagDot, FlagBadges, TPipe, TodoPanel, WorklogDialog],
   templateUrl: './dashboard.html',
 })
 export class DashboardPage {

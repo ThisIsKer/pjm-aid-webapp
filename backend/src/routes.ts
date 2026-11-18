@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { getSpSettings, rootAvailable, saveSpSettings, scanLocalSharePoint } from './localsp.ts';
 import { loadTask, loadTasks } from './todo.ts';
-import { autoTodosEnabled, generateAutoTodos, loadAutoTodoRules, setAutoTodosEnabled } from './autotodo.ts';
+import { jiraStatus, logWork, saveJiraSettings, worklogProposal } from './jira.ts';
+import { autoTodosEnabled, deleteAutoTodos, generateAutoTodos, loadAutoTodoRules, setAutoTodosEnabled, withAutoTitles } from './autotodo.ts';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { agentStatus, currentOrLastJob, recentJobs, startSync, type SyncMode, autoSync } from './agent.ts';
 import { config } from './config.ts';
@@ -109,6 +110,8 @@ export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void })
       deadlines: loadDeadlines(db, 'd.eff_project_id = :id', { id }),
       mailThreads: toApiList(db.prepare('SELECT * FROM mail_threads WHERE project_id = ? ORDER BY last_message_at DESC').all(id)),
       docRequirements: project.docs,
+      autoTodos: db.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(status <> 'completed'), 0) AS open FROM todo_tasks
+        WHERE project_id = ? AND origin = 'auto'`).get(id),
     });
   });
 
@@ -346,7 +349,7 @@ export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void })
   });
 
   // ---------- To-do list (kept in the app) ----------
-  r.get('/todo', (req, res) => res.json({ tasks: loadTasks(db, req.query['all'] === 'true') }));
+  r.get('/todo', (req, res) => res.json({ tasks: withAutoTitles(loadTasks(db, req.query['all'] === 'true') as Record<string, unknown>[], loadAutoTodoRules(config.seedFile)) }));
   r.post('/todo', (req, res) => {
     const b = req.body as { title?: string; dueDate?: string | null; notes?: string | null; importance?: string; projectId?: string | null };
     if (!b.title?.trim()) return res.status(400).json({ error: 'title is required' });
@@ -371,6 +374,8 @@ export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void })
       status === 'completed' ? (cur['completed_at'] ?? new Date().toISOString().slice(0, 10)) : null,
       b.projectId !== undefined ? b.projectId || null : cur['project_id'] ?? null,
       id);
+    // A renamed automatic to-do keeps your title (no more translation).
+    if (b.title !== undefined) db.prepare('UPDATE todo_tasks SET auto_rule = NULL WHERE id = ?').run(id);
     res.json(loadTask(db, id));
   });
   // Automatic to-dos from the Jira planning
@@ -381,10 +386,45 @@ export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void })
     res.json({ enabled: autoTodosEnabled(db), rules: loadAutoTodoRules(config.seedFile), ...run });
   });
   r.post('/todo/auto/run', (_req, res) => res.json(generateAutoTodos(db, loadAutoTodoRules(config.seedFile))));
+  // From the project page: create its automatic to-dos now (also re-creates deleted ones) / delete them all.
+  r.post('/projects/:id/autotodos', (req, res) => {
+    if (!getProjectRow(db, param(req, 'id'))) return notFound(res);
+    res.json(generateAutoTodos(db, loadAutoTodoRules(config.seedFile), { projectId: param(req, 'id'), manual: true }));
+  });
+  r.delete('/projects/:id/autotodos', (req, res) => res.json({ deleted: deleteAutoTodos(db, param(req, 'id')) }));
 
   r.delete('/todo/:id', (req, res) => {
     if (!db.prepare('DELETE FROM todo_tasks WHERE id = ?').run(param(req, 'id')).changes) return notFound(res);
     res.json({ ok: true });
+  });
+
+  // ---------- Jira work log (personal API token) ----------
+  const fail = (res: Response, err: unknown) => res.status((err as { status?: number }).status ?? 500).json({ error: (err as Error).message });
+  r.get('/settings/jira', (_req, res) => res.json(jiraStatus(db)));
+  r.put('/settings/jira', async (req, res) => {
+    try {
+      res.json(await saveJiraSettings(db, req.body as { site?: string; email?: string; token?: string; tempoToken?: string; clear?: boolean; clearTempo?: boolean }));
+    } catch (err) {
+      fail(res, err);
+    }
+  });
+  const isDate = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  r.get('/worklog', async (req, res) => {
+    try {
+      res.json(await worklogProposal(db, isDate(req.query['date']) ? req.query['date'] : isoToday()));
+    } catch (err) {
+      fail(res, err);
+    }
+  });
+  r.post('/worklog', async (req, res) => {
+    const b = req.body as { date?: string; entries?: { key: string; hours: number; comment?: string }[] };
+    if (!isDate(b.date) || !Array.isArray(b.entries)) return res.status(400).json({ error: 'date and entries are required' });
+    const entries = b.entries.filter((e) => typeof e.key === 'string' && /^[A-Z][A-Z0-9]+-\d+$/.test(e.key) && e.hours > 0 && e.hours <= 24);
+    try {
+      res.json(await logWork(db, b.date, entries));
+    } catch (err) {
+      fail(res, err);
+    }
   });
 
   // ---------- Sync (Claude snapshot import) ----------

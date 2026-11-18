@@ -19,6 +19,7 @@ const NEW_GROUP = '__new__';
       <h1>{{ 'proj.title' | t }}</h1>
       <div class="meta">
         <label class="small muted"><input type="checkbox" [checked]="showHidden()" (change)="showHidden.set(!showHidden())" /> {{ 'proj.showHidden' | t }}</label>
+        @if (autoMsg(); as m) { <span class="small">{{ m }}</span> }
         <button class="primary" (click)="dialog.open()">+ {{ 'grp.new' | t }}</button>
       </div>
     </header>
@@ -47,7 +48,7 @@ const NEW_GROUP = '__new__';
         <table>
           <thead>
             <tr><th></th><th>{{ 'col.project' | t }}</th><th>{{ 'col.myStatus' | t }}</th><th>{{ 'col.phase' | t }}</th><th>{{ 'col.jira' | t }}</th>
-              <th>{{ 'col.nextDue' | t }}</th><th>{{ 'col.group' | t }}</th><th>{{ 'col.groupInto' | t }}</th><th></th></tr>
+              <th>{{ 'col.nextDue' | t }}</th><th>{{ 'col.group' | t }}</th><th>{{ 'col.groupInto' | t }}</th><th>{{ 'col.autoTodo' | t }}</th><th></th></tr>
           </thead>
           <tbody>
             @for (p of s.projects; track p.id) {
@@ -81,6 +82,12 @@ const NEW_GROUP = '__new__';
                     </select>
                   }
                 </td>
+                <td class="auto-cell">
+                  <button class="small" (click)="createAuto(p)" [disabled]="autoBusy()" [title]="'pd.autoCreateHelp' | t">{{ 'proj.autoCreate' | t }}</button>
+                  @if (autoCount().get(p.id); as n) {
+                    <button class="small danger" (click)="deleteAuto(p, n)" [disabled]="autoBusy()" [title]="'pd.autoDeleteHelp' | t">{{ 'proj.autoDelete' | t: { n: n } }}</button>
+                  }
+                </td>
                 <td><button (click)="toggleActive(p)">{{ (p.active ? 'common.hide' : 'common.show') | t }}</button></td>
               </tr>
             }
@@ -102,6 +109,38 @@ export class ProjectsPage {
   protected readonly showHidden = signal(false);
   protected readonly all = httpResource<Project[]>(() => '/api/projects?all=true');
   protected readonly groups = httpResource<ProjectGroup[]>(() => '/api/groups');
+  /** Number of automatic to-dos per project (for the delete button). */
+  private readonly todos = httpResource<{ tasks: { projectId: string | null; origin?: string }[] }>(() => '/api/todo?all=true');
+  protected readonly autoCount = computed(() => {
+    const m = new Map<string, number>();
+    for (const t of this.todos.value()?.tasks ?? []) if (t.origin === 'auto' && t.projectId) m.set(t.projectId, (m.get(t.projectId) ?? 0) + 1);
+    return m;
+  });
+  protected readonly autoMsg = signal<string | null>(null);
+  protected readonly autoBusy = signal(false);
+
+  protected async createAuto(p: Project) {
+    this.autoBusy.set(true);
+    try {
+      const r = await this.api.createProjectAutoTodos(p.id);
+      this.autoMsg.set(`${p.name}: ${r.created ? this.i18n.t('pd.autoCreated', { n: r.created }) : this.i18n.t('pd.autoNothing')}`);
+      this.todos.reload();
+    } finally {
+      this.autoBusy.set(false);
+    }
+  }
+
+  protected async deleteAuto(p: Project, n: number) {
+    if (!confirm(this.i18n.t('pd.autoConfirmDelete', { n, p: p.name }))) return;
+    this.autoBusy.set(true);
+    try {
+      const r = await this.api.deleteProjectAutoTodos(p.id);
+      this.autoMsg.set(`${p.name}: ${this.i18n.t('pd.autoDeleted', { n: r.deleted })}`);
+      this.todos.reload();
+    } finally {
+      this.autoBusy.set(false);
+    }
+  }
   protected readonly projects = computed(() => (this.all.value() ?? []).filter((p) => this.showHidden() || p.active));
   protected readonly targets = computed(() => (this.all.value() ?? []).filter((p) => p.active));
 

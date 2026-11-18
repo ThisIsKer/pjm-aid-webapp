@@ -251,6 +251,24 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   `,
+  /* v12 — automatic to-dos are localised at display time: rule id, phase info and project name are stored */ `
+  ALTER TABLE todo_tasks ADD COLUMN auto_rule TEXT;
+  ALTER TABLE todo_tasks ADD COLUMN auto_info TEXT;
+  ALTER TABLE todo_tasks ADD COLUMN auto_project TEXT;
+  `,
+  /* v13 — Jira work logs written by the app (history; Jira is the source of truth) */ `
+  CREATE TABLE worklog_entries (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    issue_key       TEXT NOT NULL,
+    work_date       TEXT NOT NULL,
+    seconds         INTEGER NOT NULL,
+    comment         TEXT,
+    jira_worklog_id TEXT,
+    ok              INTEGER NOT NULL,
+    error           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  `,
 ];
 
 export function openDb(file: string): DatabaseSync {

@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Api } from '../../core/api';
 import { I18n, TPipe, type Lang } from '../../core/i18n';
-import type { AgentStatus, AutoTodoRule, SpStatus } from '../../core/models';
+import type { AgentStatus, AutoTodoRule, JiraStatus, SpStatus } from '../../core/models';
 import { SyncService } from '../../core/sync';
 import { Theme, type ThemeChoice } from '../../core/theme';
 import { SyncButton } from '../../shared/sync-button';
@@ -96,6 +96,43 @@ import { SyncProgress } from '../../shared/sync-progress';
       </div>
 
       <div class="card">
+        <h2>Jira</h2>
+        <p class="help small muted">{{ 'jr.help' | t }}
+          <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank">{{ 'jr.createToken' | t }}</a></p>
+        @if (jira.value(); as j) {
+          <div class="setting">
+            <div>
+              <div class="label">{{ 'jr.status' | t }}</div>
+              <div class="help">
+                @if (j.connected) { <span class="green-text">{{ 'jr.connected' | t: { n: j.displayName } }}</span> }
+                @else if (j.hasToken) { <span class="red-text">{{ 'jr.notVerified' | t }}</span> }
+                @else { {{ 'jr.noToken' | t }} }
+                · Tempo:
+                @if (j.tempoConnected) { <span class="green-text">{{ 'jr.tempoOk' | t }}</span> }
+                @else if (j.hasTempoToken) { <span class="red-text">{{ 'jr.notVerified' | t }}</span> }
+                @else { {{ 'jr.tempoNone' | t }} }
+                @if (jiraMsg(); as m) { · <span [class.red-text]="jiraErr()">{{ m }}</span> }
+              </div>
+            </div>
+            <div class="sync-now">
+              @if (j.hasTempoToken) { <button (click)="saveJira({ clearTempo: true })">{{ 'jr.removeTempo' | t }}</button> }
+              @if (j.hasToken) { <button (click)="saveJira({ clear: true })">{{ 'jr.remove' | t }}</button> }
+            </div>
+          </div>
+          <div class="setting stack">
+            <label class="form-label">{{ 'jr.email' | t }} <input type="email" [value]="j.email ?? ''" #jEmail autocomplete="username" /></label>
+            <label class="form-label">{{ 'jr.token' | t }} <input type="password" #jToken autocomplete="off" [placeholder]="j.hasToken ? ('jr.tokenKeep' | t) : ''" /></label>
+            <label class="form-label">{{ 'jr.tempoToken' | t }}
+              <input type="password" #tToken autocomplete="off" [placeholder]="j.hasTempoToken ? ('jr.tokenKeep' | t) : ''" /></label>
+            <div class="help small muted">{{ 'jr.tempoHelp' | t }}</div>
+            <div class="sync-now">
+              <button class="primary" (click)="saveJira({ email: jEmail.value, token: jToken.value, tempoToken: tToken.value }); jToken.value = ''; tToken.value = ''">{{ 'jr.save' | t }}</button>
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="card">
         <h2>{{ 'auto.todoTitle' | t }}</h2>
         <p class="help small muted">{{ 'auto.todoHelp' | t }}</p>
         @if (autoTodo.value(); as a) {
@@ -116,7 +153,7 @@ import { SyncProgress } from '../../shared/sync-progress';
             <thead><tr><th>{{ 'col.phase' | t }}</th><th>{{ 'auto.todoTask' | t }}</th><th>{{ 'auto.todoWhen' | t }}</th></tr></thead>
             <tbody>
               @for (r of a.rules; track r.id) {
-                <tr><td>{{ r.phases.join(' / ') }}</td><td>{{ r.title }}</td>
+                <tr><td>{{ r.phases.join(' / ') }}</td><td>{{ r.titles?.[i18n.lang()] ?? r.title }}</td>
                   <td class="muted">{{ (r.anchor === 'start' ? 'auto.todoBeforeStart' : 'auto.todoBeforeEnd') | t: { n: r.daysBefore } }}</td></tr>
               }
             </tbody>
@@ -178,6 +215,22 @@ export class SettingsPage {
   protected readonly sp = httpResource<SpStatus>(() => '/api/settings/sharepoint');
   protected readonly autoTodo = httpResource<{ enabled: boolean; rules: AutoTodoRule[] }>(() => '/api/settings/autotodo');
   protected readonly autoMessage = signal<string | null>(null);
+  protected readonly jira = httpResource<JiraStatus>(() => '/api/settings/jira');
+  protected readonly jiraMsg = signal<string | null>(null);
+  protected readonly jiraErr = signal(false);
+
+  protected async saveJira(body: { email?: string; token?: string; tempoToken?: string; clear?: boolean; clearTempo?: boolean }) {
+    this.jiraMsg.set(null);
+    try {
+      this.jira.set(await this.api.saveJira(body));
+      this.jiraErr.set(false);
+      this.jiraMsg.set(body.clear || body.clearTempo ? null : this.i18n.t('jr.verified'));
+    } catch (err: any) {
+      this.jiraErr.set(true);
+      this.jiraMsg.set(err?.error?.error ?? String(err));
+      this.jira.reload();
+    }
+  }
 
   protected async saveAuto(enabled: boolean) {
     const r = await this.api.saveAutoTodos(enabled);

@@ -151,6 +151,8 @@ export interface ProjectDetail extends Project {
   deadlines: Deadline[];
   mailThreads: MailThread[];
   docRequirements: DocRequirement[];
+  /** Automatic to-dos of the project. */
+  autoTodos: { open: number; total: number };
 }
 
 export interface SyncStep { at: string; label: string; count: number }
@@ -191,9 +193,24 @@ export interface TodoTask {
   status: 'notStarted' | 'completed' | string; completedAt: string | null; projectId: string | null; projectName: string | null;
   /** app = added by you, auto = created from the Jira planning */
   origin?: 'app' | 'auto' | string;
+  /** Automatic to-dos: rule, phase info and the title in each language (null once you rename it). */
+  autoRule?: string | null;
+  autoInfo?: { phase: string; anchor: 'start' | 'end'; date: string; keys: string[] } | null;
+  autoTitles?: Record<string, string> | null;
 }
 
-export interface AutoTodoRule { id: string; phases: string[]; title: string; anchor: 'start' | 'end'; daysBefore: number }
+export interface WorklogProposal {
+  date: string; connected: boolean; via: 'tempo' | 'jira' | null; warning: string | null; loggedDayHours: number | null;
+  capacityHours: number; meetingHours: number; availableHours: number;
+  items: { key: string; title: string; project: string | null; url: string | null; plannedHours: number | null;
+    remainingHours: number | null; loggedHours: number | null; proposedHours: number; overdue: boolean }[];
+}
+export interface JiraStatus {
+  site: string; email: string | null; hasToken: boolean; connected: boolean; displayName: string | null;
+  hasTempoToken: boolean; tempoConnected: boolean;
+}
+
+export interface AutoTodoRule { id: string; phases: string[]; title: string; titles?: Record<string, string>; anchor: 'start' | 'end'; daysBefore: number }
 
 export interface WeekPlan {
   today: string; from: string; to: string; capacityHours: number; activityHours: number; meetingHours: number;
