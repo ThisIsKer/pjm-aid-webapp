@@ -48,6 +48,10 @@ To try the UI with demo data, use `data/seed.example.json` as `data/seed.json` a
 - **Sync now** (Settings, and automatically at the first opening of the day): runs the `pjm-sync` skill through Claude Code in this folder (needs Claude Code installed
   and signed in with your claude.ai account). Choose *Jira + mail*, *Jira + mail + docs* or *Jira only*; progress and
   Claude's summary appear under the button. Allowed tools: `.claude/settings.json`.
+- **Secretary** (menu → *Segretario*): what the `pjm-secretary` skill extracted from mail, Teams and documents —
+  what waits on you, what you wait on, risks, dates, decisions, documentation proposals (approve / reject) and the
+  end-of-day recap. *Read mail and Teams* and *Write the recap* run the skill through Claude Code like Sync now.
+  The ledger stays in `data/ledger/`; the app changes it only through `tools/secretary/ledger.mjs`.
 - **From any Claude chat**: "sync PJM" / "sync PJM docs" in Cowork, or `claude` in this folder.
 - **MCP server** — lets Claude read and update the board ("what's late on IMA?", "mark the Dorigo mail as done").
   The backend must be running.
@@ -57,4 +61,5 @@ To try the UI with demo data, use `data/seed.example.json` as `data/seed.json` a
     "mcpServers": { "pjm-aid": { "command": "node", "args": ["C:\\Users\\SebastianoFilippetto\\Documents\\pjm-aid-webapp\\backend\\src\\mcp.ts"] } }
     ```
     and restart the app.
-- Sources: `.claude/skills/pjm-sync/SKILL.md` (skill), `tools/build-snapshot.ts` (snapshot builder), `backend/src/agent.ts` (Sync now), `backend/src/mcp.ts` (MCP).
+- Sources: `.claude/skills/pjm-sync/SKILL.md` (skill), `tools/build-snapshot.ts` (snapshot builder), `backend/src/agent.ts` (Sync now), `backend/src/mcp.ts` (MCP),
+  `.claude/skills/pjm-secretary/` + `tools/secretary/` (secretary), `backend/src/secretary.ts` (Secretary page).

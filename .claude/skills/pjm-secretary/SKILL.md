@@ -24,6 +24,8 @@ so and stop.
    session. Never edit `data/registry.json`, `data/seed.json`, the app DB or `data/ledger/rules.json` (unless asked).
 4. Every fact keeps its source. Secrets (passwords, tokens, keys) are never copied: write "(token nella mail)".
 5. Headless: never ask; a denied tool goes in `run.denied`; finish what you can. Shell only for `L` and the backup script.
+6. The PJM aid app shows the ledger on its Secretary page and changes it only through `L apply` (deltas named
+   `delta-…-app.json`, `run.notes` "PJM aid app"): items it closed and proposal decisions it recorded are Sebastiano's.
 
 ## Modes
 
@@ -31,7 +33,7 @@ so and stop.
 |---|---|
 | "secretary ingest", scheduled daytime runs | §Ingest |
 | "secretary recap", "riepilogo di fine giornata", scheduled evening run | §Ingest, then `references/recap.md` |
-| "proposte", "approva 2 e 4", "scarta 3" (interactive only) | `references/review.md` |
+| "proposte", "approva 2 e 4", "scarta 3", "applica le proposte approvate" (interactive only) | `references/review.md` |
 | "pulisci ledger", "secretary cleanup" (interactive only) | §Cleanup |
 | "riordina cartelle", "riordina la cartella di X", "smista il buffer" (interactive only) | `references/organize.md` |
 | questions about a project | `L context --projects <id>`, answer with links; ingest only what is missing |

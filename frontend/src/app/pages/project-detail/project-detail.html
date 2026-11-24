@@ -128,9 +128,46 @@
       <!-- Mail -->
       <div class="card panel">
         <div class="card-head">
-          <h2>{{ 'pd.mail' | t }}</h2>
-          @if (openMail().length) { <span class="small muted">{{ openMail().length }}</span> }
+          @if (secAvailable()) {
+            <div class="segmented mini">
+              <button [class.on]="mailTab() === 'mail'" (click)="mailTab.set('mail')">{{ 'pd.tabMail' | t }}@if (openMail().length) { ({{ openMail().length }}) }</button>
+              <button [class.on]="mailTab() === 'sec'" (click)="mailTab.set('sec')">{{ 'pd.tabSec' | t }}@if (secEntries().length) { ({{ secEntries().length }}) }</button>
+            </div>
+            @if (mailTab() === 'sec') { <a class="small" routerLink="/secretary" [queryParams]="{ project: p.id }">{{ 'pd.secOpen' | t }}</a> }
+          } @else {
+            <h2>{{ 'pd.mail' | t }}</h2>
+            @if (openMail().length) { <span class="small muted">{{ openMail().length }}</span> }
+          }
         </div>
+        @if (mailTab() === 'sec' && secAvailable()) {
+          <div class="scroll">
+            <ul class="sec-list pd-sec-list">
+              @for (e of secEntries(); track e.id) {
+                <li [class.u-critical]="secDue(e)" [class.u-warning]="!secDue(e) && e.urgency === 'high'">
+                  <div class="what">
+                    <span class="badge" [class.red]="e.type === 'needs_reply' || e.type === 'risk'" [class.amber]="e.type === 'action' || e.type === 'question'">{{ 'sec.type.' + e.type | t }}</span>
+                    @if (e.kind === 'thread' && e.link) { <a [href]="e.link" target="_blank">{{ e.text }}</a> } @else { {{ e.text }} }
+                    <div class="small muted">
+                      @if (e.eventDate) { {{ e.eventDate | date: 'EEE d/MM' : undefined : i18n.locale() }} · }
+                      @if (e.owner && e.owner !== 'me') { {{ 'sec.owner' | t: { n: e.owner } }} · }
+                      @if (e.counterpart) { {{ 'sec.with' | t: { n: e.counterpart } }} · }
+                      {{ e.since | date: 'd/MM' : undefined : i18n.locale() }}
+                      @if (e.kind === 'item' && e.link) { · <a [href]="e.link" target="_blank">{{ 'sec.source' | t }}</a> }
+                    </div>
+                  </div>
+                  <div class="right">
+                    @if (e.due) { <span class="badge" [class.red]="secDue(e)">{{ 'sec.due' | t: { d: (e.due | date: 'd/MM' : undefined : i18n.locale()) } }}</span> }
+                    @if (secCloseLabel(e); as label) {
+                      <button class="small" (click)="secClose(e)" [disabled]="secBusy() === e.id" [title]="'sec.doneHelp' | t">{{ label | t }}</button>
+                    }
+                  </div>
+                </li>
+              } @empty {
+                <li class="empty-row muted small">{{ 'pd.secEmpty' | t }}</li>
+              }
+            </ul>
+          </div>
+        } @else {
         <div class="scroll">
           <ul class="deadline-list">
             @for (m of openMail(); track m.id) {
@@ -148,6 +185,7 @@
             }
           </ul>
         </div>
+        }
       </div>
     </section>
   </div>

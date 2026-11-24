@@ -6,6 +6,7 @@ import { I18n, TPipe, jiraReason } from '../../core/i18n';
 import type { Dashboard, DayPlan, Meeting, Project, ProjectGroup, Rag, WeekPlan } from '../../core/models';
 import { FlagBadges } from '../../shared/flag-badges';
 import { RagDot } from '../../shared/rag-dot';
+import { SecretaryService } from '../../core/secretary';
 import { SyncService } from '../../core/sync';
 import { TodoPanel } from '../../shared/todo-panel';
 import { WorklogDialog } from '../../shared/worklog-dialog';
@@ -24,6 +25,7 @@ type ProjectRow =
 })
 export class DashboardPage {
   private readonly sync = inject(SyncService);
+  private readonly secretary = inject(SecretaryService);
   protected readonly i18n = inject(I18n);
   protected readonly data = httpResource<Dashboard>(() => '/api/dashboard');
   protected readonly plan = httpResource<DayPlan>(() => '/api/today');
@@ -65,6 +67,10 @@ export class DashboardPage {
     // reload when a sync (auto or from Settings) ends
     effect(() => {
       if (this.sync.completed()) this.reload();
+    });
+    // the secretary KPI follows secretary runs and changes made on its page
+    effect(() => {
+      if (this.secretary.completed()) this.data.reload();
     });
     effect(() => {
       const v = this.groupFilter();

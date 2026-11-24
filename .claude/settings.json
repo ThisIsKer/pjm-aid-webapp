@@ -1,9 +1,9 @@
 {
-  "$comment": "Project permissions for the pjm-sync skill (used by the app's 'Sync now' headless runs and by interactive sessions in this folder): read-only connector tools, the snapshot builder, and writes under data/work only.",
+  "$comment": "Project permissions for the headless runs started by the app ('Sync now' → pjm-sync, 'Read mail and Teams' / 'Write the recap' → pjm-secretary) and for interactive sessions in this folder: read-only connector tools, the snapshot builder and the ledger tools, and file edits only under data/work, data/ledger/inbox, data/ledger/recaps and the personal 'PJM Management' folder (never its 'old' backups). Claude Code checks file paths only against Edit(...) rules.",
   "permissions": {
     "allow": [
       "Skill(pjm-sync)",
-      "Write(./data/work/**)",
+      "Skill(pjm-secretary)",
       "Edit(./data/work/**)",
       "Bash(node tools/build-snapshot.ts *)",
       "PowerShell(node tools/build-snapshot.ts *)",
@@ -16,7 +16,18 @@
       "mcp__claude_ai_Microsoft_365__outlook_calendar_search",
       "mcp__claude_ai_Microsoft_365__sharepoint_search",
       "mcp__claude_ai_Microsoft_365__sharepoint_folder_search",
-      "mcp__claude_ai_Microsoft_365__read_resource"
+      "mcp__claude_ai_Microsoft_365__read_resource",
+      "Edit(./data/ledger/inbox/**)",
+      "Edit(./data/ledger/recaps/**)",
+      "Edit(~/OneDrive - Archiva Group/Documents/PJM Management/**)",
+      "Bash(node tools/secretary/ledger.mjs *)",
+      "PowerShell(node tools/secretary/ledger.mjs *)",
+      "Bash(node tools/secretary/backup-file.mjs *)",
+      "PowerShell(node tools/secretary/backup-file.mjs *)",
+      "mcp__claude_ai_Microsoft_365__chat_message_search"
+    ],
+    "deny": [
+      "Edit(~/OneDrive - Archiva Group/Documents/PJM Management/**/old/**)"
     ]
   }
 }

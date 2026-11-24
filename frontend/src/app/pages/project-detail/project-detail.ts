@@ -3,12 +3,13 @@ import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { Api } from '../../core/api';
+import { SecretaryService } from '../../core/secretary';
 import { SyncService } from '../../core/sync';
 import { DocLocation, DocStateBadge } from '../../shared/doc-cells';
 import { DocPathDialog } from '../../shared/doc-path-dialog';
 import { I18n, TPipe, jiraReason } from '../../core/i18n';
 import { AddDocDialog } from '../../shared/add-doc-dialog';
-import type { Deadline, DocRequirement, MailThread, ProjectDetail, Rag } from '../../core/models';
+import type { Deadline, DocRequirement, MailThread, ProjectDetail, Rag, SecEntry, SecretaryOverview } from '../../core/models';
 import { FlagBadges } from '../../shared/flag-badges';
 import { RagDot } from '../../shared/rag-dot';
 
@@ -41,9 +42,43 @@ export class ProjectDetailPage {
   protected readonly manual = computed(() => (this.project.value()?.deadlines ?? []).filter((d) => d.source !== 'jira'));
   protected readonly openMail = computed(() => (this.project.value()?.mailThreads ?? []).filter((m) => m.userState !== 'done'));
 
+  // Secretary: this project's open entries (mail panel, second tab)
+  private readonly secretary = inject(SecretaryService);
+  protected readonly mailTab = signal<'mail' | 'sec'>('mail');
+  protected readonly sec = httpResource<SecretaryOverview>(() => `/api/secretary?project=${encodeURIComponent(this.id())}`);
+  protected readonly secEntries = computed<SecEntry[]>(() => {
+    const d = this.sec.value();
+    if (!d?.available) return [];
+    const order = (e: SecEntry) => (e.due && e.due < d.today ? 0 : e.type === 'risk' ? 1 : 2);
+    return [...d.onMe, ...d.risks, ...d.waiting, ...d.dates].sort((a, b) => order(a) - order(b));
+  });
+  protected readonly secAvailable = computed(() => !!this.sec.value()?.available);
+  protected readonly secBusy = signal<string | null>(null);
+  protected secDue(e: SecEntry) {
+    const today = this.sec.value()?.today ?? '';
+    return e.due && e.due < today;
+  }
+  protected async secClose(e: SecEntry) {
+    const label = e.type === 'risk' ? 'sec.resolved' : e.type === 'waiting_on' ? 'sec.received' : 'sec.done';
+    this.secBusy.set(e.id);
+    try {
+      await this.api.closeSecretaryItem(e.id, this.i18n.t(`${label}.reason`));
+      this.secretary.notifyChanged();
+    } finally {
+      this.secBusy.set(null);
+    }
+  }
+  protected secCloseLabel(e: SecEntry) {
+    if (e.kind !== 'item' || e.status !== 'open' || e.type === 'date') return null;
+    return e.type === 'risk' ? 'sec.resolved' : e.type === 'waiting_on' ? 'sec.received' : 'sec.done';
+  }
+
   constructor() {
     effect(() => {
       if (this.sync.completed()) this.project.reload();
+    });
+    effect(() => {
+      if (this.secretary.completed()) this.sec.reload();
     });
     effect(() => {
       const p = this.project.value();

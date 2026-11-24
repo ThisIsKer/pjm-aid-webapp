@@ -14,5 +14,8 @@ export const config = {
   snapshotFile: path.join(dataDir, 'inbox', 'snapshot.json'),
   /** Read by the Claude pjm-sync skill: projects, doc checklist and open mail threads. */
   registryFile: path.join(dataDir, 'registry.json'),
+  /** PJM secretary ledger (written only by tools/secretary/ledger.mjs) and the tool itself. */
+  ledgerDir: process.env['PJM_LEDGER_ROOT'] ?? path.join(dataDir, 'ledger'),
+  ledgerTool: path.join(root, 'tools', 'secretary', 'ledger.mjs'),
   frontendDist: path.join(root, 'frontend', 'dist', 'frontend', 'browser'),
 };

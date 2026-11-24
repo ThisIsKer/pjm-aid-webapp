@@ -139,7 +139,9 @@ export interface SyncRun {
 export interface Dashboard {
   today: string;
   horizon: string;
-  kpis: { activeProjects: number; overdue: number; atRisk: number; dueSoon: number; needsReply: number; missingDocs: number; uncheckedDocs: number; attentionDocs: number };
+  kpis: { activeProjects: number; overdue: number; atRisk: number; dueSoon: number; needsReply: number; missingDocs: number; uncheckedDocs: number; attentionDocs: number;
+    /** Things waiting on me according to the secretary ledger (null = no ledger yet). */
+    secretaryOnMe: number | null };
   projects: Project[];
   deadlines: Deadline[];
   lastSync: SyncRun | null;
@@ -231,3 +233,59 @@ export interface SpStatus {
   enabled: boolean; localRoot: string; webBase: string; available: boolean;
   projects: number; mapped: number; lastScanAt: string | null;
 }
+
+// ---------- Secretary (pjm-secretary ledger) ----------
+export type SecItemType = 'decision' | 'open_point' | 'action' | 'question' | 'waiting_on' | 'technical' | 'date' | 'risk';
+export type SecThreadState = 'needs_reply' | 'waiting' | 'fyi' | 'none';
+
+/** One line of the secretary page: a ledger item, or a mail / Teams thread. */
+export interface SecEntry {
+  id: string; kind: 'item' | 'thread'; type: SecItemType | SecThreadState; projectId: string; projectName: string | null;
+  appProjectId: string | null; text: string; detail: string | null; owner: string | null; counterpart: string | null;
+  due: string | null; eventDate: string | null; status: 'open' | 'reference' | 'closed'; urgency: 'high' | 'normal' | 'low' | null;
+  since: string; lastUpdated: string; link: string | null; sourceKind: string | null; ownerMissing: boolean;
+}
+
+export interface SecProposal {
+  id: string; createdAt: string; projectId: string; projectName: string | null; appProjectId: string | null;
+  kind: 'update' | 'create'; status: 'pending' | 'stale' | 'approved' | string; rationale: string; needsTemplate?: boolean;
+  target: { location: 'shared' | 'personal'; docType: string; path: string; webUrl?: string; baseModifiedAt?: string };
+  changes: { op: string; locator?: unknown; content: unknown; itemIds?: string[] }[];
+  sources: { kind: string; at: string; from?: string; link: string | null }[];
+  decision?: { at: string; note?: string };
+}
+
+export interface SecDocChange {
+  at: string; repository: string; name: string; url: string; change: string; path?: string; modifiedBy?: string;
+  projectId: string; projectName: string | null; appProjectId: string | null;
+}
+
+export interface SecretaryJob {
+  id: number; mode: 'ingest' | 'recap'; status: 'running' | 'ok' | 'error'; startedAt: string; finishedAt?: string | null;
+  steps: { at: string; label: string; count: number }[]; resultText?: string | null; denials: string[]; error?: string | null;
+  costUsd?: number | null; applied?: boolean;
+}
+
+export interface SecretaryOverview {
+  available: boolean; ledgerDir?: string; today: string; horizon: string; days: number;
+  lastRun: { mail?: string; teams?: string; docs?: string; recap?: string };
+  kpis: { onMe: number; needsReply: number; waiting: number; proposals: number; approved: number; risks: number; unassigned: number };
+  onMe: SecEntry[]; waiting: SecEntry[]; openPoints: SecEntry[]; risks: SecEntry[]; dates: SecEntry[]; decisions: SecEntry[];
+  docChanges: SecDocChange[]; proposals: SecProposal[]; unassigned: SecEntry[];
+  projects: { projectId: string; appProjectId: string | null; projectName: string | null; open: number }[];
+  recapDates: string[]; job: SecretaryJob | null; agentAvailable: boolean;
+}
+
+export interface SecRecapLine { text: string; urgency?: 'high' | 'normal' | 'low'; itemId?: string; threadKey?: string; link: string | null }
+export interface SecRecap {
+  date: string | null; dates: string[];
+  recap: null | {
+    date: string; generatedAt: string; language?: string; pendingProposals: number; unassigned: string[]; notes?: string[];
+    projects: { projectId: string; appProjectId: string | null; name: string; changedToday: SecRecapLine[]; waitingOnMe: SecRecapLine[];
+      waitingOnOthers: SecRecapLine[]; documentation: SecRecapLine[]; jira: SecRecapLine[] }[];
+    tomorrow: { start: string; end?: string; subject: string; projectId?: string }[];
+  };
+}
+
+export interface SecEvent { at: string; kind: string; projectId: string; projectName: string | null; appProjectId: string | null; ref?: string; text: string; link: string | null }
+export interface SecRunReport { file: string; mode: string | null; at: string | null; fromApp: boolean; text: string }

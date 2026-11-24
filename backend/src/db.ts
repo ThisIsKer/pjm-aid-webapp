@@ -269,6 +269,21 @@ const MIGRATIONS: string[] = [
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   );
   `,
+  /* v14 — secretary runs started from the app (pjm-secretary skill through Claude Code, like sync_jobs) */ `
+  CREATE TABLE secretary_jobs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    mode         TEXT NOT NULL CHECK (mode IN ('ingest','recap')),
+    status       TEXT NOT NULL CHECK (status IN ('running','ok','error')),
+    started_at   TEXT NOT NULL,
+    finished_at  TEXT,
+    steps        TEXT NOT NULL DEFAULT '[]',
+    result_text  TEXT,
+    denials      TEXT NOT NULL DEFAULT '[]',
+    error        TEXT,
+    cost_usd     REAL,
+    applied      INTEGER NOT NULL DEFAULT 0
+  );
+  `,
 ];
 
 export function openDb(file: string): DatabaseSync {

@@ -9,13 +9,16 @@
   }
 
   @if (data.value(); as d) {
-    <section class="kpis">
+    <section class="kpis" [class.six]="d.kpis.secretaryOnMe !== null">
       <a class="kpi" routerLink="/projects"><div class="value">{{ d.kpis.activeProjects }}</div><div class="label">{{ 'kpi.projects' | t }}</div></a>
       <div class="kpi" [class.alert]="d.kpis.overdue > 0"><div class="value">{{ d.kpis.overdue }}</div><div class="label">{{ 'kpi.overdue' | t }}</div></div>
       <div class="kpi" [class.warn]="d.kpis.atRisk > 0"><div class="value">{{ d.kpis.atRisk }}</div><div class="label">{{ 'kpi.atRisk' | t }}</div></div>
       <a class="kpi" routerLink="/mail" [class.alert]="d.kpis.needsReply > 0"><div class="value">{{ d.kpis.needsReply }}</div><div class="label">{{ 'kpi.mail' | t }}</div></a>
       <a class="kpi" routerLink="/docs" [class.alert]="d.kpis.missingDocs > 0"><div class="value">{{ d.kpis.missingDocs }}</div>
         <div class="label">{{ 'kpi.docs' | t }}@if (d.kpis.attentionDocs) { · <span class="amber-text">{{ 'kpi.attention' | t: { n: d.kpis.attentionDocs } }}</span> }</div></a>
+      @if (d.kpis.secretaryOnMe !== null) {
+        <a class="kpi" routerLink="/secretary" [class.alert]="d.kpis.secretaryOnMe > 0"><div class="value">{{ d.kpis.secretaryOnMe }}</div><div class="label">{{ 'kpi.secretary' | t }}</div></a>
+      }
     </section>
   }
 

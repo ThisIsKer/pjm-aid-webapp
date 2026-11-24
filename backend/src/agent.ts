@@ -20,10 +20,10 @@ const prompt = (mode: SyncMode, lang: 'it' | 'en') =>
   `Run the pjm-sync skill in local mode (you are invoked headless by the PJM aid app in its repo folder): ${SCOPE[mode]}. ` +
   `Write the final report in ${lang === 'en' ? 'English' : 'Italian'}.`;
 const TIMEOUT_MS = 25 * 60 * 1000;
-const bin = () => process.env['PJM_CLAUDE_BIN'] ?? 'claude';
+export const claudeBin = () => process.env['PJM_CLAUDE_BIN'] ?? 'claude';
 const isWin = process.platform === 'win32';
 
-interface Step { at: string; label: string; count: number }
+export interface Step { at: string; label: string; count: number }
 interface Job {
   id: number; mode: SyncMode; origin: 'manual' | 'auto'; status: 'running' | 'ok' | 'error'; startedAt: string; finishedAt?: string;
   steps: Step[]; resultText?: string; denials: string[]; error?: string; costUsd?: number; imported?: boolean;
@@ -34,9 +34,9 @@ let agentInfo: { available: boolean; version: string | null; bin: string; checke
 
 export function agentStatus(refresh = false) {
   if (!agentInfo || refresh) {
-    const r = spawnSync(bin(), ['--version'], { encoding: 'utf8', shell: isWin, windowsHide: true, timeout: 20_000 });
+    const r = spawnSync(claudeBin(), ['--version'], { encoding: 'utf8', shell: isWin, windowsHide: true, timeout: 20_000 });
     const out = `${r.stdout ?? ''}`.trim();
-    agentInfo = { available: r.status === 0 && !!out, version: out || null, bin: bin(), checkedAt: new Date().toISOString() };
+    agentInfo = { available: r.status === 0 && !!out, version: out || null, bin: claudeBin(), checkedAt: new Date().toISOString() };
   }
   return { ...agentInfo, running: !!current };
 }
@@ -63,27 +63,28 @@ function save(db: DatabaseSync, job: Job) {
     job.resultText ?? null, JSON.stringify(job.denials), job.error ?? null, job.costUsd ?? null, job.imported ? 1 : 0, job.id);
 }
 
-export function startSync(db: DatabaseSync, mode: SyncMode, lang: 'it' | 'en' = 'it', origin: 'manual' | 'auto' = 'manual'): Job {
-  if (current) throw Object.assign(new Error('A sync is already running'), { status: 409 });
-  if (!agentStatus().available) throw Object.assign(new Error(`Claude Code not found ("${bin()} --version" failed)`), { status: 503 });
+/** Live state of a headless Claude Code run (shared by "Sync now" and the secretary runs). */
+export interface ClaudeRunState {
+  steps: Step[]; resultText?: string; denials: string[]; error?: string; costUsd?: number;
+}
 
-  const startedAt = new Date().toISOString();
-  const id = Number(db.prepare(`INSERT INTO sync_jobs (mode, origin, status, started_at) VALUES (?, ?, 'running', ?)`)
-    .run(mode, origin, startedAt).lastInsertRowid);
-  const job: Job = { id, mode, origin, status: 'running', startedAt, steps: [], denials: [] };
-
+/**
+ * Runs Claude Code headless in the repo folder with `prompt` on stdin and parses its stream-json output into
+ * `state` (steps, final message, cost, denied tools). `onExit` is called once, when the process ends.
+ */
+export function runClaude(state: ClaudeRunState, prompt: string, stepOf: (tool: string) => string,
+  onExit: (code: number | null, spawnError?: Error) => void): ChildProcess {
   // Prompt goes through stdin: no quoting problems with the Windows shell.
-  const child = spawn(bin(), ['-p', '--output-format', 'stream-json', '--verbose', '--permission-prompts', 'none'], {
+  const child = spawn(claudeBin(), ['-p', '--output-format', 'stream-json', '--verbose', '--permission-prompts', 'none'], {
     cwd: config.root, shell: isWin, windowsHide: true, env: { ...process.env },
   });
-  current = { job, child };
-  child.stdin?.end(prompt(mode, lang));
+  child.stdin?.end(prompt);
 
   const addStep = (label: string) => {
-    const last = job.steps.at(-1);
+    const last = state.steps.at(-1);
     if (last?.label === label) last.count++;
-    else job.steps.push({ at: new Date().toISOString(), label, count: 1 });
-    if (job.steps.length > 40) job.steps.shift();
+    else state.steps.push({ at: new Date().toISOString(), label, count: 1 });
+    if (state.steps.length > 40) state.steps.shift();
   };
   addStep('start');
 
@@ -99,17 +100,17 @@ export function startSync(db: DatabaseSync, mode: SyncMode, lang: 'it' | 'en' = 
       try {
         const msg = JSON.parse(line) as Record<string, any>;
         if (msg['type'] === 'assistant') {
-          for (const c of msg['message']?.content ?? []) if (c.type === 'tool_use') addStep(stepFor(String(c.name)));
+          for (const c of msg['message']?.content ?? []) if (c.type === 'tool_use') addStep(stepOf(String(c.name)));
         } else if (msg['type'] === 'result') {
-          job.resultText = typeof msg['result'] === 'string' ? msg['result'] : undefined;
-          job.costUsd = typeof msg['total_cost_usd'] === 'number' ? msg['total_cost_usd'] : undefined;
+          state.resultText = typeof msg['result'] === 'string' ? msg['result'] : undefined;
+          state.costUsd = typeof msg['total_cost_usd'] === 'number' ? msg['total_cost_usd'] : undefined;
           // Keep what was denied and, for shell commands, the command itself (shown in the app).
-          job.denials = (msg['permission_denials'] ?? []).map((d: any) => {
+          state.denials = (msg['permission_denials'] ?? []).map((d: any) => {
             const input = d.tool_input ?? d.toolInput ?? {};
             const detail = input.command ?? input.file_path ?? input.path ?? '';
             return `${d.tool_name ?? d.toolName ?? '?'}${detail ? `: ${String(detail).slice(0, 160)}` : ''}`;
           });
-          if (msg['is_error']) job.error = job.resultText ?? String(msg['subtype'] ?? 'error');
+          if (msg['is_error']) state.error = state.resultText ?? String(msg['subtype'] ?? 'error');
         }
       } catch {
         /* non-JSON line: ignore */
@@ -119,7 +120,7 @@ export function startSync(db: DatabaseSync, mode: SyncMode, lang: 'it' | 'en' = 
   child.stderr?.on('data', (c: Buffer) => { stderr = (stderr + c.toString('utf8')).slice(-4000); });
 
   const timer = setTimeout(() => {
-    job.error = `Timed out after ${TIMEOUT_MS / 60000} minutes`;
+    state.error = `Timed out after ${TIMEOUT_MS / 60000} minutes`;
     child.kill();
   }, TIMEOUT_MS);
 
@@ -128,9 +129,26 @@ export function startSync(db: DatabaseSync, mode: SyncMode, lang: 'it' | 'en' = 
     clearTimeout(timer);
     if (finished) return;
     finished = true;
+    if (spawnError) state.error = spawnError.message;
+    else if (code !== 0 && !state.error) state.error = stderr.trim() || `Claude Code exited with code ${code}`;
+    onExit(code, spawnError);
+  };
+  child.on('error', (err) => finish(null, err));
+  child.on('close', (code) => finish(code));
+  return child;
+}
+
+export function startSync(db: DatabaseSync, mode: SyncMode, lang: 'it' | 'en' = 'it', origin: 'manual' | 'auto' = 'manual'): Job {
+  if (current) throw Object.assign(new Error('A sync is already running'), { status: 409 });
+  if (!agentStatus().available) throw Object.assign(new Error(`Claude Code not found ("${claudeBin()} --version" failed)`), { status: 503 });
+
+  const startedAt = new Date().toISOString();
+  const id = Number(db.prepare(`INSERT INTO sync_jobs (mode, origin, status, started_at) VALUES (?, ?, 'running', ?)`)
+    .run(mode, origin, startedAt).lastInsertRowid);
+  const job: Job = { id, mode, origin, status: 'running', startedAt, steps: [], denials: [] };
+
+  const child = runClaude(job, prompt(mode, lang), stepFor, () => {
     job.finishedAt = new Date().toISOString();
-    if (spawnError) job.error = spawnError.message;
-    else if (code !== 0 && !job.error) job.error = stderr.trim() || `Claude Code exited with code ${code}`;
     // The inbox watcher imports the snapshot ~1.5 s after it lands; check a little later.
     setTimeout(() => {
       const last = db.prepare('SELECT imported_at FROM sync_runs ORDER BY id DESC LIMIT 1').get() as { imported_at: string } | undefined;
@@ -139,9 +157,8 @@ export function startSync(db: DatabaseSync, mode: SyncMode, lang: 'it' | 'en' = 
       save(db, job);
       current = null;
     }, 3000);
-  };
-  child.on('error', (err) => finish(null, err));
-  child.on('close', (code) => finish(code));
+  });
+  current = { job, child };
   save(db, job);
   return job;
 }

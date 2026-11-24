@@ -3,6 +3,10 @@
 1. `L proposals`, then show the pending ones grouped by project, numbered, with target file, the changes in plain
    words and the source links (`L context --projects <id>` if you need the items). Wait for decisions:
    `approva`, `scarta`, `modifica <n>: …`.
+   Proposals already `approved` (Sebastiano approved them in the PJM aid app's Secretary page — that is his
+   decision): list them first as "approvate nell'app" and, on "applica le proposte approvate" (or after the pending
+   ones are decided), go straight to step 2 for them without asking again. Proposals he rejected in the app are
+   already `rejected`: don't show them.
 2. For each approved proposal:
    - **Freshness:** if the target file is newer than `baseModifiedAt` (someone edited it), don't apply: regenerate
      the changes against the current file and show them again. A OneDrive conflict copy or a locked file → stop

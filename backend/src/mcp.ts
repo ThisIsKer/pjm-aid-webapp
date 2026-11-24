@@ -58,7 +58,7 @@ const projectLine = (p: any) => ({
   mailsToAnswer: p.needsReply, missingDocs: p.missingDocs, uncheckedDocs: p.uncheckedDocs, epics: p.jiraKeys,
 });
 
-const server = new McpServer({ name: 'pjm-aid', version: '0.4.0' });
+const server = new McpServer({ name: 'pjm-aid', version: '0.5.0' });
 
 server.registerTool('pjm_dashboard', {
   title: 'PJM dashboard',
@@ -268,6 +268,57 @@ server.registerTool('pjm_sync_status', {
   const [health, job] = await Promise.all([api('/health'), api('/sync/jobs/current')]);
   return { lastSync: health.lastSync, lastSyncNowRun: job };
 }));
+
+const secLine = (e: any) => ({
+  id: e.kind === 'item' ? e.id : undefined, type: e.type, project: e.projectName ?? e.projectId, text: e.text, detail: e.detail ?? undefined,
+  owner: e.owner ?? undefined, counterpart: e.counterpart ?? undefined, due: e.due ?? undefined, date: e.eventDate ?? undefined,
+  urgency: e.urgency ?? undefined, since: e.since, link: e.link ?? undefined, ownerMissing: e.ownerMissing || undefined,
+});
+
+server.registerTool('pjm_secretary', {
+  title: 'Secretary: what waits on me',
+  description: 'What the PJM secretary extracted from mail, Teams and documents: items waiting on me (actions, questions, mails to answer), ' +
+    'what I wait on from others, open risks, dates in the next 14 days, recent decisions, pending documentation proposals and threads to sort. ' +
+    'Optional project (app project id, epic key or name).',
+  inputSchema: { project: z.string().optional(), days: z.number().int().min(1).max(60).optional().describe('Look-back for decisions and document changes (default 7)') },
+  annotations: { readOnlyHint: true },
+}, tool(async ({ project, days }: { project?: string; days?: number }) => {
+  const id = project ? (await resolveProject(project)).id : undefined;
+  const q = new URLSearchParams({ ...(id ? { project: id } : {}), ...(days ? { days: String(days) } : {}) });
+  const d = await api(`/secretary?${q}`);
+  if (!d.available) return { available: false, note: `No secretary ledger yet (${d.ledgerDir}). Run "secretary ingest" in Claude Code.` };
+  return {
+    lastRun: d.lastRun, counts: d.kpis,
+    onMe: d.onMe.map(secLine), waitingOnOthers: d.waiting.map(secLine), openPoints: d.openPoints.map(secLine), risks: d.risks.map(secLine),
+    dates: d.dates.map(secLine), recentDecisions: d.decisions.map(secLine),
+    documentChanges: d.docChanges.map((c: any) => ({ project: c.projectName ?? c.projectId, name: c.name, change: c.change, at: c.at, by: c.modifiedBy, url: c.url })),
+    proposals: d.proposals.map((p: any) => ({ id: p.id, status: p.status, project: p.projectName ?? p.projectId, document: p.target.path, docType: p.target.docType,
+      rationale: p.rationale, changes: p.changes.length })),
+    toSort: d.unassigned.map(secLine),
+  };
+}));
+
+server.registerTool('pjm_secretary_recap', {
+  title: 'Secretary: end-of-day recap',
+  description: 'The end-of-day recap written by the secretary (latest, or the one of a given date YYYY-MM-DD), with links.',
+  inputSchema: { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() },
+  annotations: { readOnlyHint: true },
+}, tool(async ({ date }: { date?: string }) => api(`/secretary/recap${date ? `?date=${date}` : ''}`)));
+
+server.registerTool('pjm_secretary_close_item', {
+  title: 'Secretary: mark an item done',
+  description: 'Closes a secretary item (action, question, open point, waiting-on, risk…) in the ledger, e.g. when I say it is done. ' +
+    'Use the id from pjm_secretary (like DDMD-1234-ACT-005). Mail threads are not items: their state follows the mailbox.',
+  inputSchema: { id: z.string().regex(/-(DEC|OPN|ACT|QST|WAI|TEC|DAT|RSK)-\d{3,}$/), reason: z.string().max(200).optional() },
+}, tool(async ({ id, reason }: { id: string; reason?: string }) => api(`/secretary/items/${encodeURIComponent(id)}/close`, { method: 'POST', body: { reason } })));
+
+server.registerTool('pjm_secretary_decide_proposal', {
+  title: 'Secretary: approve or reject a documentation proposal',
+  description: 'Records my decision on a documentation proposal (id like P-20261124-001): approve, reject (with a reason) or back to pending. ' +
+    'Approving does not edit the document: approved proposals are applied in Claude Code with "applica le proposte approvate".',
+  inputSchema: { id: z.string().regex(/^P-\d{8}-\d{3}$/), decision: z.enum(['approve', 'reject', 'pending']), note: z.string().max(300).optional() },
+}, tool(async ({ id, decision, note }: { id: string; decision: 'approve' | 'reject' | 'pending'; note?: string }) =>
+  api(`/secretary/proposals/${id}`, { method: 'PATCH', body: { status: decision === 'approve' ? 'approved' : decision === 'reject' ? 'rejected' : 'pending', note } })));
 
 await server.connect(new StdioServerTransport());
 console.error(`[pjm-aid mcp] ready (backend ${BASE})`);

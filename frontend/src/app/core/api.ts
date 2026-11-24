@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import type { Deadline, DocRequirement, MailThread, Project, ProjectFiles, ProjectGroup, SpStatus, SyncJob, TodoTask, JiraStatus, WorklogProposal } from './models';
+import type { Deadline, DocRequirement, MailThread, Project, ProjectFiles, ProjectGroup, SpStatus, SyncJob, TodoTask, JiraStatus, WorklogProposal, SecretaryJob } from './models';
 
 /** Write operations. Reads use httpResource() directly in the pages. */
 @Injectable({ providedIn: 'root' })
@@ -123,6 +123,24 @@ export class Api {
 
   currentSyncJob() {
     return firstValueFrom(this.http.get<SyncJob | null>('/api/sync/jobs/current'));
+  }
+
+  /** Secretary: closes an item in the ledger (through ledger.mjs apply). */
+  closeSecretaryItem(id: string, reason?: string) {
+    return firstValueFrom(this.http.post<{ ok: boolean; report: string }>(`/api/secretary/items/${encodeURIComponent(id)}/close`, { reason }));
+  }
+
+  /** Secretary: approve / reject a documentation proposal, or put it back to pending. */
+  decideSecretaryProposal(id: string, status: 'approved' | 'rejected' | 'pending', note?: string) {
+    return firstValueFrom(this.http.patch<{ ok: boolean; report: string }>(`/api/secretary/proposals/${encodeURIComponent(id)}`, { status, note }));
+  }
+
+  startSecretary(mode: SecretaryJob['mode'], lang: 'it' | 'en') {
+    return firstValueFrom(this.http.post<SecretaryJob>('/api/secretary/run', { mode, lang }));
+  }
+
+  currentSecretaryJob() {
+    return firstValueFrom(this.http.get<SecretaryJob | null>('/api/secretary/jobs/current'));
   }
 
   importSnapshot(force = false) {

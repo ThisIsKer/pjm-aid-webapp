@@ -2,6 +2,8 @@
 
 Personal project-management aid for Sebastiano (DDM). Runs locally on the Windows laptop, never exposed to the network.
 It answers four questions: **how are my projects doing, what is due, which mails do I owe a reply, which projects are missing documentation.**
+A fifth page shows what the **PJM secretary** (`pjm-secretary` skill) extracted from mail, Teams and documents: what waits on
+me, what I wait on, risks, dates, decisions and documentation proposals (§5b).
 
 ## 1. Big picture
 
@@ -236,16 +238,56 @@ Authentication (Settings → Jira): Atlassian e-mail + **Jira API token** (alway
 the local database (`data/`, git-ignored) and are never returned by the API. Claude is not involved: logging is
 deterministic and instant, and works without a sync.
 
+## 5b. Secretary page
+
+The `pjm-secretary` skill (`.claude/skills/pjm-secretary/`) keeps a **ledger** in `data/ledger/` (git-ignored): per
+project the extracted items (decision, open point, action, question, waiting-on, technical, date, risk — each with its
+source message), mail/Teams threads with their reply state, documentation proposals, day event logs, end-of-day recaps
+and run reports. The ledger has one writer, `tools/secretary/ledger.mjs`, which merges a small delta file per run
+(`ledger.mjs apply`). The app follows the same rule — `backend/src/secretary.ts`:
+
+- **reads** the ledger files directly to build the page (nothing is copied into SQLite);
+- **writes** only through `ledger.mjs apply`: *Done / Resolved / Received* on an item → a delta with
+  `{ op: "close" }` (`run.mode: "cleanup"`); *Approve / Reject / Undo approval* on a proposal → a delta with
+  `proposalUpdates` (`run.mode: "apply"`). The delta lands in `data/ledger/inbox/delta-…-app.json`, `run.notes` say
+  "PJM aid app" (the run reports list hides these unless asked). If apply fails nothing is written and the delta is
+  removed. **Approving does not touch the document**: approved proposals are applied in Claude Code
+  ("applica le proposte approvate", `references/review.md`), which re-checks that the file hasn't changed and asks
+  permission for the edit;
+- maps ledger project ids (Jira epic keys) to app projects through `jira_epics`, so merged epics show under the project
+  they were merged into; `_unassigned` threads are "To sort", `_internal-…` buckets "Internal: …".
+
+**Page** (`/secretary`, same frame as the dashboard): last mail/Teams read and last recap, a project filter
+(remembered in the browser; `?project=<id>` from the project page), **Read mail and Teams** / **Write the recap**
+(the skill through Claude Code headless, like Sync now: `secretary_jobs`, one run at a time, 25-minute timeout, steps,
+denied tools and Claude's report). KPIs — waiting on me (incl. mails to answer), waiting on others, open risks, dates
+within 14 days, proposals to decide (and approved ones to apply), threads to sort — each brings its list into view.
+Four panels:
+- **Waiting on me** — open actions / questions / open points owned by `me`, actions and questions without an owner
+  (flagged), threads `needs_reply`; sorted overdue → urgent → due date → oldest. Red edge = overdue, amber = urgent or
+  due within 2 days. Then the threads to sort.
+- **Waiting on others** — `waiting_on` items, actions/questions owned by someone else, threads `waiting` (longest
+  waiting first); then open points owned by others.
+- **Risks, dates and decisions** — open risks, `date` items within 14 days, decisions and technical notes of the last
+  7 days, documents changed by others (`docChanges`).
+- **Documentation proposals** — pending, stale (document changed since) and approved, with target file, rationale,
+  the proposed changes and their sources.
+
+Right column: **Recap** (any `recaps/<date>.json`, links resolved like `recap-render`), **Day** (the day's events,
+previous/next day) and **Runs** (the app's last secretary run with live progress, then `runs/*.md` reports).
+The dashboard shows a *Waiting on me (secretary)* KPI when a ledger exists, and the project page's mail panel gets a
+*Mail / Secretary* toggle with that project's open entries.
+
 **`data/registry.json`** — written by the backend after every import and every change made in the UI; the skill
 stages it to know projects, current phases, SharePoint folders, the checklist with `required` flags, open mail
 threads and the last sync time.
 
-## 6. Database schema (v13)
+## 6. Database schema (v14)
 
 `projects` · `project_groups` · `project_files` · `todo_lists` · `todo_tasks` · `jira_epics` · `deadlines` (+ view `v_deadlines` resolving each phase's project through its epic) ·
-`mail_threads` · `calendar_events` · `doc_requirements` · `doc_template` · `sync_runs` · `sync_jobs` — see `backend/src/db.ts`.
+`mail_threads` · `calendar_events` · `doc_requirements` · `doc_template` · `sync_runs` · `sync_jobs` · `secretary_jobs` — see `backend/src/db.ts`.
 Migrations are append-only and tracked with `PRAGMA user_version` (v3 adds `projects.sharepoint_folder_uri`,
-`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`; v8 adds `project_files`, `projects.files_scanned_at`, `doc_requirements.pinned`; v9 adds `app_settings`, `projects.files_source`, `doc_template.keywords`; v10 adds `todo_tasks` (and `todo_lists`, unused); v11 adds `auto_todo_log`; v12 adds `todo_tasks.auto_rule / auto_info / auto_project`; v13 adds `worklog_entries`). Requirement id = `<projectId>--<slug(title)>`, which is the id
+`required_from` / `client_match` / `from_template`; v4 adds `sync_jobs` for "Sync now"; v5 adds `calendar_events`; v6 adds `project_groups` + `projects.group_id`; v7 adds `sync_jobs.origin` and `doc_requirements.found_path / found_modified_at / confirmed_at / confirmed_ref`; v8 adds `project_files`, `projects.files_scanned_at`, `doc_requirements.pinned`; v9 adds `app_settings`, `projects.files_source`, `doc_template.keywords`; v10 adds `todo_tasks` (and `todo_lists`, unused); v11 adds `auto_todo_log`; v12 adds `todo_tasks.auto_rule / auto_info / auto_project`; v13 adds `worklog_entries`; v14 adds `secretary_jobs`). Requirement id = `<projectId>--<slug(title)>`, which is the id
 Claude reports back in `docChecks`.
 
 ## 7. Snapshot contract v2 (`data/inbox/snapshot.json`)
@@ -317,6 +359,11 @@ Full example: `docs/examples/snapshot.example.json`.
 | POST | `/sync/run` | `{ mode: daily \| docs \| jira, lang: it \| en }` — start "Sync now" (409 if one is running) |
 | POST | `/sync/auto` | `{ mode, lang }` — first opening of the day: starts a sync unless one already ran today → `{ started, reason, job }` |
 | GET | `/sync/jobs/current` · `/sync/jobs` | running or last job (steps, result text, denied tools) · last 10 |
+| GET | `/secretary?project=&days=7` | secretary page: last runs, KPIs, waiting on me / others, open points, risks, dates, decisions, doc changes, proposals, threads to sort, projects, recap dates, current job (`available: false` without a ledger) |
+| GET | `/secretary/recap?date=` · `/secretary/events?date=` · `/secretary/runs` | an end-of-day recap (default latest) · a day's events · run reports + the app's last 10 runs |
+| POST | `/secretary/items/:id/close` | `{ reason? }` → closes the item through `ledger.mjs apply` |
+| PATCH | `/secretary/proposals/:id` | `{ status: approved \| rejected \| pending, note? }` → records the decision through `ledger.mjs apply` (409 if already applied/rejected) |
+| POST | `/secretary/run` · GET `/secretary/jobs/current` | `{ mode: ingest \| recap, lang }` — run the pjm-secretary skill headless (409 if one is running) · running or last run |
 
 ## 9. Claude integration
 
@@ -337,12 +384,17 @@ Full example: `docs/examples/snapshot.example.json`.
    (Jira search / user info, Confluence search, Outlook search, SharePoint search / read, get_me), the builder
    command and writes under `data/work/`. Anything else is denied and listed in the result panel (as a note when the
    sync still succeeded). The skill tells Claude never to use the shell except for the builder.
+   The secretary's headless runs (`secretary.ts`, same runner `runClaude()` in `agent.ts`) use the same file, which also
+   pre-approves `Skill(pjm-secretary)`, Teams chat search, the two `tools/secretary/*.mjs` commands and edits under
+   `data/ledger/inbox/`, `data/ledger/recaps/` and the personal `PJM Management` folder (its `old` backups denied).
+   File paths are matched only by `Edit(...)` rules.
    `PJM_CLAUDE_BIN` overrides the `claude` executable.
 3. **MCP server** (`backend/src/mcp.ts`, stdio, talks to the running backend's REST API so the backend stays the
    only writer). Tools: `pjm_dashboard`, `pjm_list_projects`, `pjm_get_project` (id, epic key or name),
    `pjm_today`, `pjm_list_mail`, `pjm_update_mail` (done / snooze / reopen / assign), `pjm_doc_gaps`, `pjm_update_project`
    (status, PM note, phase override, SharePoint link, hide/show, custom group — created if missing), `pjm_add_deadline`, `pjm_waive_doc`, `pjm_confirm_doc`, `pjm_set_doc_location`, `pjm_list_tasks`, `pjm_add_task`, `pjm_complete_task`,
-   `pjm_sync_status`. Register it in Claude Code with
+   `pjm_sync_status`, `pjm_secretary` (what waits on me / others, risks, dates, proposals — optional project),
+   `pjm_secretary_recap`, `pjm_secretary_close_item`, `pjm_secretary_decide_proposal`. Register it in Claude Code with
    `claude mcp add pjm-aid --scope user -- node <repo>\backend\src\mcp.ts`, and in the Claude desktop app
    (so Cowork sessions linked to the laptop see it) under `mcpServers` in `claude_desktop_config.json`.
 4. **(Optional) in-app Claude actions** — "draft reply", "summarise thread" via the Anthropic API.
@@ -370,4 +422,5 @@ Full example: `docs/examples/snapshot.example.json`.
 | 4l | Localised automatic to-dos; create / delete them from the project page | ✅ |
 | 4m | Automatic to-do buttons on each project row; Jira work log with a personal API token | ✅ |
 | 4n | Work log through Tempo (Tempo API token): Tempo-native entries, already-logged hours from the Tempo timesheet | ✅ |
+| 4o | Secretary page over the pjm-secretary ledger (waiting on me / others, risks, dates, decisions, proposals, recap, runs); actions through `ledger.mjs apply`; runs from the app; MCP tools | ✅ |
 | 5 | Weekday-morning scheduled sync (daily Jira + mail + calendar, Monday + docs) | at the end |

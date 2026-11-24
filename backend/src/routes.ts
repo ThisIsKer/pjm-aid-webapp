@@ -13,6 +13,10 @@ import { applyDocTemplate } from './seed.ts';
 import { dayPlan, weekPlan } from './today.ts';
 import { importSnapshotIfPresent } from './snapshot.ts';
 import { slug, toApi, toApiList } from './util.ts';
+import {
+  closeSecretaryItem, currentOrLastSecretaryJob, decideSecretaryProposal, recentSecretaryJobs, secretaryEvents, secretaryOnMeCount,
+  secretaryOverview, secretaryRecap, secretaryRuns, startSecretary, type SecretaryMode,
+} from './secretary.ts';
 
 type FieldDef = { col: string; json?: boolean; bool?: boolean };
 
@@ -79,6 +83,8 @@ export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void })
         missingDocs: projects.reduce((n, p) => n + p.missingDocs, 0),
         uncheckedDocs: projects.reduce((n, p) => n + p.uncheckedDocs, 0),
         attentionDocs: projects.reduce((n, p) => n + p.attentionDocs, 0),
+        /** Things waiting on me according to the secretary (null = no ledger yet). */
+        secretaryOnMe: secretaryOnMeCount(db),
       },
       projects: projects.map(({ docs: _docs, ...p }) => p),
       deadlines,
@@ -464,6 +470,48 @@ export function apiRouter(db: DatabaseSync, sharepoint?: { rescan: () => void })
   r.get('/sync/runs', (_req, res) => {
     res.json(toApiList(db.prepare('SELECT * FROM sync_runs ORDER BY id DESC LIMIT 20').all()));
   });
+
+  // ---------- Secretary (pjm-secretary ledger: read here, written only through ledger.mjs) ----------
+  r.get('/secretary', (req, res) => {
+    const project = typeof req.query['project'] === 'string' && req.query['project'] ? req.query['project'] : undefined;
+    res.json(secretaryOverview(db, { project, days: Number(req.query['days'] ?? 7) || 7 }));
+  });
+  r.get('/secretary/recap', (req, res) => {
+    const out = secretaryRecap(db, isDate(req.query['date']) ? req.query['date'] : undefined);
+    if (!out) return notFound(res);
+    res.json(out);
+  });
+  r.get('/secretary/events', (req, res) => {
+    const out = secretaryEvents(db, isDate(req.query['date']) ? req.query['date'] : isoToday());
+    if (!out) return notFound(res);
+    res.json(out);
+  });
+  r.get('/secretary/runs', (_req, res) => res.json({ reports: secretaryRuns(), jobs: recentSecretaryJobs(db) }));
+  r.post('/secretary/items/:id/close', (req, res) => {
+    try {
+      res.json(closeSecretaryItem(param(req, 'id'), (req.body as { reason?: string })?.reason));
+    } catch (err) {
+      fail(res, err);
+    }
+  });
+  r.patch('/secretary/proposals/:id', (req, res) => {
+    const b = req.body as { status?: string; note?: string };
+    try {
+      res.json(decideSecretaryProposal(param(req, 'id'), String(b.status ?? ''), b.note));
+    } catch (err) {
+      fail(res, err);
+    }
+  });
+  r.post('/secretary/run', (req, res) => {
+    const b = req.body as { mode?: string; lang?: string };
+    if (!['ingest', 'recap'].includes(String(b.mode))) return res.status(400).json({ error: 'mode must be ingest or recap' });
+    try {
+      res.status(202).json(startSecretary(db, b.mode as SecretaryMode, b.lang === 'en' ? 'en' : 'it'));
+    } catch (err) {
+      fail(res, err);
+    }
+  });
+  r.get('/secretary/jobs/current', (_req, res) => res.json(currentOrLastSecretaryJob(db)));
 
   return r;
 }

@@ -7,5 +7,6 @@ Local, machine-only data. Everything here except this README and `seed.example.j
 | `seed.json` | You | Project registry + documentation checklist. Loaded only into an empty DB (`npm run db:reset` to reload). |
 | `pjm.db` | Backend | SQLite database (created automatically). |
 | `inbox/snapshot.json` | Claude | Output of the `pjm-sync` skill. Imported at backend start and via **Import snapshot** on the dashboard. |
+| `ledger/` | Claude (pjm-secretary) | The secretary's ledger: items, threads, proposals, events, recaps, run reports. Written only by `tools/secretary/ledger.mjs`; shown on the app's Secretary page. |
 
 Snapshot format: see `docs/ARCHITECTURE.md` and `docs/examples/snapshot.example.json`.

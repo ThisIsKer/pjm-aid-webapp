@@ -449,3 +449,86 @@ button.ok-btn:hover { border-color: var(--green); color: var(--green); }
 .auto-cell button + button { margin-left: 4px; }
 button.small { font-size: 12px; padding: 3px 8px; }
 .worklog-dialog .wl-via { margin: 6px 0; }
+
+/* ---------- Secretary page (same frame as the dashboard: KPIs, four panels, a column on the right) ---------- */
+.dash .kpis.six, .sec-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .dash .kpis.six, .sec-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+button.kpi { font: inherit; text-align: left; cursor: pointer; }
+button.kpi:hover { border-color: var(--accent); color: inherit; }
+.sec-layout { grid-template-columns: minmax(0, 1fr) clamp(300px, 26vw, 430px); }
+.sec-grid { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+.panel.flash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .2s; }
+.panel .sub-head.first { margin-top: 0; }
+.sec-error { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; margin-bottom: 10px; }
+.sec-empty-ledger { max-width: 640px; }
+.sec-running { display: inline-flex; align-items: center; gap: 6px; }
+.sec-hint { margin: 10px 0 4px; }
+.badge.info { background: var(--note-bg); color: var(--note-text); }
+
+/* one line = an item or a thread; the coloured edge (u-critical / u-warning) shows the pressure */
+.sec-list { list-style: none; margin: 0; padding: 0; }
+.sec-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0 8px 10px; border-bottom: 1px solid var(--border); }
+.sec-list li:last-child { border-bottom: 0; }
+.sec-list.plain li { padding-left: 0; }
+.sec-list li.empty-row { padding-left: 0; border-bottom: 0; }
+.sec-list .what { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.sec-list .what .line .badge { margin-right: 4px; }
+.sec-list .what > .small { margin-top: 2px; }
+.sec-list .what .muted .badge { margin-left: 6px; }
+.sec-list .right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.sec-tech { color: var(--note-text); background: var(--note-bg); border-radius: 4px; padding: 1px 6px; display: inline-block; }
+
+.sec-dates { list-style: none; margin: 0; padding: 0; }
+.sec-dates li { display: flex; gap: 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.sec-dates li:last-child { border-bottom: 0; }
+.sec-dates li.past { opacity: .6; }
+.sec-date { flex: 0 0 74px; font-weight: 600; font-variant-numeric: tabular-nums; text-transform: capitalize; }
+.sec-dates .what { min-width: 0; overflow-wrap: anywhere; }
+
+.sec-proposal { padding: 10px 0 12px; border-bottom: 1px solid var(--border); }
+.sec-proposal:first-child { padding-top: 0; }
+.sec-proposal.approved { opacity: .8; }
+.sec-proposal .p-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; overflow-wrap: anywhere; }
+.sec-proposal .p-why { margin: 6px 0; }
+.sec-proposal details { margin: 4px 0 8px; }
+.sec-proposal summary { cursor: pointer; color: var(--accent); }
+.p-changes { margin: 6px 0; padding-left: 18px; }
+.p-changes li { margin-bottom: 6px; }
+.p-content { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-2); border-radius: 6px; padding: 4px 8px; margin-top: 2px; }
+.p-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.p-actions .p-note { flex: 1 1 160px; min-width: 0; font-size: 12px; }
+
+/* right column */
+.sec-side > .card-head { margin-bottom: 10px; }
+.sec-side-select { display: block; margin-bottom: 8px; flex-shrink: 0; }
+select.sec-side-select { width: 100%; text-transform: capitalize; }
+.sec-recap .recap-project { padding: 10px 0 4px; border-bottom: 1px solid var(--border); }
+.sec-recap .recap-project:last-of-type { border-bottom: 0; }
+.sec-recap h3 { font-size: 14px; margin: 0 0 4px; }
+.sec-recap .recap-part { font-size: 12px; font-weight: 600; color: var(--muted); margin: 6px 0 2px; }
+.sec-recap ul { margin: 0; padding-left: 18px; line-height: 1.45; }
+.sec-recap li.high { font-weight: 600; }
+.sec-recap li.high::marker { color: var(--red); }
+.sec-recap .src { margin-left: 6px; font-size: 12px; }
+.recap-foot { margin-top: 10px; }
+.sec-day-nav { display: flex; gap: 6px; margin-bottom: 8px; flex-shrink: 0; }
+.sec-day-nav input { flex: 1; min-width: 0; }
+.sec-events { list-style: none; margin: 0; padding: 0; }
+.sec-events li { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.sec-events li:last-child { border-bottom: 0; }
+.sec-events .time { flex: 0 0 38px; padding-top: 2px; font-variant-numeric: tabular-nums; }
+.sec-events .what { min-width: 0; overflow-wrap: anywhere; }
+.sec-job { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.sec-run { border-bottom: 1px solid var(--border); padding: 6px 0; }
+.sec-run summary { cursor: pointer; }
+.sec-run summary .badge { margin-right: 6px; }
+.sec-run pre { white-space: pre-wrap; font-size: 11px; background: var(--surface-2); border-radius: 6px; padding: 8px; margin: 6px 0 0; overflow-wrap: anywhere; }
+
+/* project page: mail / secretary toggle in the mail panel */
+.pd-sec-list .what > .badge { margin-right: 4px; }
+
+@media (max-width: 1100px) {
+  .sec-layout { grid-template-columns: 1fr; height: auto; }
+  .sec-side { max-height: 80vh; }
+}
+@media (prefers-reduced-motion: reduce) { .panel.flash { transition: none; } }
