@@ -21,6 +21,17 @@ npm run build
 npm start            # http://localhost:4310
 ```
 
+Desktop icons (no PowerShell window): run once
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\windows\create-shortcut.ps1          # -Remove to delete the icons
+```
+
+**PJM aid** starts the app in the background if it isn't running and opens http://localhost:4310 (logs in
+`data/logs/`); **PJM aid - stop** stops it (do that before `npm run build` / `git pull`).
+
+Claude Code needs no separate start: the backend launches it for Sync now and the daily auto-sync.
+
 ## Your data
 
 - Projects are created from your **Jira epics** by Claude's `pjm-sync` skill — ask Claude "sync PJM" (Jira + mail) or "sync PJM docs" (+ SharePoint/Confluence checks). On the Projects page you can merge epics, put projects into your own groups, or hide them. Settings (gear icon) has Sync now, import snapshot, the daily auto-sync (first opening of the day), language and light/dark theme.
