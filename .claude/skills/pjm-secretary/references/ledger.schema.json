@@ -1,0 +1,889 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pjm-secretary/ledger.schema.json",
+  "title": "PJM secretary ledger",
+  "description": "Schemas for every file under data/ledger/, all written by tools/secretary/ledger.mjs (Claude writes only delta files, see delta.md). state.json -> state, threads/** -> thread, projects/*.json and projects/archive/*.json -> projectState, docindex.json -> docIndex, proposals/** -> proposal, events/** -> dayEvents, recaps/** -> recap.",
+  "$defs": {
+    "isoDateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "isoDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "projectId": {
+      "description": "Registry project id (Jira epic key), _unassigned, or an internal bucket _internal-<slug>.",
+      "type": "string",
+      "pattern": "^([A-Z][A-Z0-9]+-[0-9]+|_unassigned|_internal-[a-z0-9-]+)$"
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "ref",
+        "at"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "mail",
+            "teams",
+            "meeting",
+            "sharepoint",
+            "confluence",
+            "jira",
+            "manual"
+          ]
+        },
+        "threadKey": {
+          "type": "string"
+        },
+        "ref": {
+          "description": "Message id, chat message id, file webUrl, page id or issue key.",
+          "type": "string"
+        },
+        "webLink": {
+          "type": "string"
+        },
+        "at": {
+          "$ref": "#/$defs/isoDateTime"
+        },
+        "from": {
+          "type": "string"
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "text",
+        "status",
+        "firstSeen",
+        "lastUpdated",
+        "sources"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^([A-Z][A-Z0-9]+-[0-9]+|UNASSIGNED|INT-[A-Z0-9-]+)-(DEC|OPN|ACT|QST|WAI|TEC|DAT|RSK)-[0-9]{3,}$"
+        },
+        "type": {
+          "enum": [
+            "decision",
+            "open_point",
+            "action",
+            "question",
+            "waiting_on",
+            "technical",
+            "date",
+            "risk"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "language": {
+          "enum": [
+            "it",
+            "fr",
+            "en",
+            "de",
+            "other"
+          ]
+        },
+        "owner": {
+          "description": "Person expected to act (name or email). 'me' for Sebastiano.",
+          "type": "string"
+        },
+        "counterpart": {
+          "description": "For waiting_on/question: who is waited on or asked.",
+          "type": "string"
+        },
+        "due": {
+          "$ref": "#/$defs/isoDate"
+        },
+        "eventDate": {
+          "description": "For type date: the date of the milestone/meeting.",
+          "$ref": "#/$defs/isoDate"
+        },
+        "details": {
+          "description": "For type technical: identifiers copied exactly.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "system": {
+              "type": "string"
+            },
+            "objects": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "status": {
+          "description": "open = something still to happen (action, question, waiting_on, open_point, risk, future date); reference = valid information (decision, technical); closed = done, superseded or past.",
+          "enum": [
+            "open",
+            "reference",
+            "closed"
+          ]
+        },
+        "firstSeen": {
+          "$ref": "#/$defs/isoDateTime"
+        },
+        "lastUpdated": {
+          "$ref": "#/$defs/isoDateTime"
+        },
+        "closedAt": {
+          "$ref": "#/$defs/isoDateTime"
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/sourceRef"
+          }
+        },
+        "closedReason": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "supersededBy": {
+          "type": "string"
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "lastRun"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "lastRun": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mail": {
+              "$ref": "#/$defs/isoDateTime"
+            },
+            "teams": {
+              "$ref": "#/$defs/isoDateTime"
+            },
+            "docs": {
+              "$ref": "#/$defs/isoDateTime"
+            },
+            "recap": {
+              "$ref": "#/$defs/isoDateTime"
+            }
+          }
+        }
+      }
+    },
+    "thread": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "threadKey",
+        "source",
+        "projectId",
+        "assignment",
+        "messages",
+        "summary",
+        "items",
+        "replyState",
+        "updatedAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "threadKey": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]{1,90}$"
+        },
+        "source": {
+          "enum": [
+            "mail",
+            "teams",
+            "meeting"
+          ]
+        },
+        "subject": {
+          "type": "string"
+        },
+        "chatId": {
+          "type": "string"
+        },
+        "projectId": {
+          "$ref": "#/$defs/projectId"
+        },
+        "assignment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "method",
+            "confidence"
+          ],
+          "properties": {
+            "method": {
+              "enum": [
+                "rule",
+                "registry",
+                "judgement",
+                "manual"
+              ]
+            },
+            "confidence": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ]
+            },
+            "rule": {
+              "type": "string"
+            }
+          }
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "org": {
+                "enum": [
+                  "ddm",
+                  "archiva",
+                  "client",
+                  "other"
+                ]
+              }
+            }
+          }
+        },
+        "language": {
+          "enum": [
+            "it",
+            "fr",
+            "en",
+            "de",
+            "other"
+          ]
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "at",
+              "from",
+              "fromMe"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "uri": {
+                "type": "string"
+              },
+              "webLink": {
+                "type": "string"
+              },
+              "at": {
+                "$ref": "#/$defs/isoDateTime"
+              },
+              "from": {
+                "type": "string"
+              },
+              "fromMe": {
+                "type": "boolean"
+              },
+              "attachments": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "items": {
+          "description": "Ids of items extracted from this thread (full items live in the project state).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "replyState": {
+          "enum": [
+            "needs_reply",
+            "waiting",
+            "fyi",
+            "none"
+          ]
+        },
+        "urgency": {
+          "enum": [
+            "high",
+            "normal",
+            "low"
+          ]
+        },
+        "counterpart": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/isoDateTime"
+        }
+      }
+    },
+    "projectState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "projectId",
+        "name",
+        "nextSeq",
+        "items",
+        "docChanges",
+        "updatedAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "projectId": {
+          "$ref": "#/$defs/projectId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "client": {
+          "type": "string"
+        },
+        "summary": {
+          "description": "Current situation in at most 5 sentences.",
+          "type": "string",
+          "maxLength": 1200
+        },
+        "nextSeq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/item"
+          }
+        },
+        "docChanges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "at",
+              "repository",
+              "name",
+              "url",
+              "change"
+            ],
+            "properties": {
+              "at": {
+                "$ref": "#/$defs/isoDateTime"
+              },
+              "repository": {
+                "enum": [
+                  "sharepoint",
+                  "confluence"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "change": {
+                "enum": [
+                  "new",
+                  "updated"
+                ]
+              },
+              "modifiedBy": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "personalNotes": {
+          "description": "Draft notes in the personal folder (absolute paths).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "lastActivityAt": {
+          "$ref": "#/$defs/isoDateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/isoDateTime"
+        }
+      }
+    },
+    "docIndex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "documents"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "documents": {
+          "type": "object",
+          "description": "Keyed by webUrl (SharePoint) or page id (Confluence).",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "projectId",
+              "modifiedAt"
+            ],
+            "properties": {
+              "projectId": {
+                "$ref": "#/$defs/projectId"
+              },
+              "name": {
+                "type": "string"
+              },
+              "modifiedAt": {
+                "$ref": "#/$defs/isoDateTime"
+              },
+              "modifiedBy": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "id",
+        "createdAt",
+        "projectId",
+        "kind",
+        "target",
+        "changes",
+        "rationale",
+        "sources",
+        "status"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^P-[0-9]{8}-[0-9]{3}$"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/isoDateTime"
+        },
+        "projectId": {
+          "$ref": "#/$defs/projectId"
+        },
+        "kind": {
+          "enum": [
+            "update",
+            "create"
+          ]
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "location",
+            "docType",
+            "path"
+          ],
+          "properties": {
+            "location": {
+              "enum": [
+                "shared",
+                "personal"
+              ]
+            },
+            "docType": {
+              "type": "string"
+            },
+            "path": {
+              "description": "Absolute local path of the OneDrive copy.",
+              "type": "string"
+            },
+            "webUrl": {
+              "type": "string"
+            },
+            "baseModifiedAt": {
+              "description": "Modified date of the file when the proposal was drafted (absent for create).",
+              "$ref": "#/$defs/isoDateTime"
+            }
+          }
+        },
+        "changes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "op",
+              "content"
+            ],
+            "properties": {
+              "op": {
+                "enum": [
+                  "add_row",
+                  "update_row",
+                  "close_row",
+                  "add_section",
+                  "replace_section",
+                  "new_document"
+                ]
+              },
+              "locator": {
+                "description": "Row key (value of the ID column) or section heading.",
+                "type": "string"
+              },
+              "content": {
+                "description": "Column -> value for rows; markdown text for sections and new documents.",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean",
+                        "null"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "itemIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "rationale": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "needsTemplate": {
+          "type": "boolean"
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/sourceRef"
+          }
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "applied",
+            "stale"
+          ]
+        },
+        "decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "$ref": "#/$defs/isoDateTime"
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        "appliedAt": {
+          "$ref": "#/$defs/isoDateTime"
+        },
+        "resultModifiedAt": {
+          "$ref": "#/$defs/isoDateTime"
+        }
+      }
+    },
+    "dayEvents": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "date",
+        "events"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "date": {
+          "$ref": "#/$defs/isoDate"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "at",
+              "kind",
+              "projectId",
+              "text"
+            ],
+            "properties": {
+              "at": {
+                "$ref": "#/$defs/isoDateTime"
+              },
+              "kind": {
+                "enum": [
+                  "mail_in",
+                  "mail_out",
+                  "teams",
+                  "item_opened",
+                  "item_updated",
+                  "item_closed",
+                  "doc_change",
+                  "note_updated",
+                  "proposal_created",
+                  "proposal_applied",
+                  "proposal_rejected",
+                  "files_organized"
+                ]
+              },
+              "projectId": {
+                "$ref": "#/$defs/projectId"
+              },
+              "ref": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 300
+              }
+            }
+          }
+        }
+      }
+    },
+    "recap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "date",
+        "generatedAt",
+        "projects",
+        "tomorrow",
+        "pendingProposals",
+        "unassigned"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "date": {
+          "$ref": "#/$defs/isoDate"
+        },
+        "generatedAt": {
+          "$ref": "#/$defs/isoDateTime"
+        },
+        "language": {
+          "enum": [
+            "it",
+            "en",
+            "fr"
+          ]
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "projectId",
+              "name"
+            ],
+            "properties": {
+              "projectId": {
+                "$ref": "#/$defs/projectId"
+              },
+              "name": {
+                "type": "string"
+              },
+              "changedToday": {
+                "$ref": "#/$defs/recapLines"
+              },
+              "waitingOnMe": {
+                "$ref": "#/$defs/recapLines"
+              },
+              "waitingOnOthers": {
+                "$ref": "#/$defs/recapLines"
+              },
+              "documentation": {
+                "$ref": "#/$defs/recapLines"
+              },
+              "jira": {
+                "$ref": "#/$defs/recapLines"
+              }
+            }
+          }
+        },
+        "tomorrow": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "start",
+              "subject"
+            ],
+            "properties": {
+              "start": {
+                "$ref": "#/$defs/isoDateTime"
+              },
+              "end": {
+                "$ref": "#/$defs/isoDateTime"
+              },
+              "subject": {
+                "type": "string"
+              },
+              "projectId": {
+                "$ref": "#/$defs/projectId"
+              },
+              "webLink": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "pendingProposals": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unassigned": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "description": "Failures or skipped sources.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "recapLines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "urgency": {
+            "enum": [
+              "high",
+              "normal",
+              "low"
+            ]
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "link": {
+            "type": "string",
+            "description": "Optional: ledger.mjs derives the link from itemId or threadKey when omitted."
+          },
+          "threadKey": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

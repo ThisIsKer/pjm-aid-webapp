@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "recapLanguage": "it",
+  "projectRules": [
+    {
+      "projectId": "DDMD-0000",
+      "comment": "Example: replace with a real epic key from the registry",
+      "domains": [
+        "cliente-esempio.com"
+      ],
+      "keywords": [
+        "FEI UAE",
+        "Peppol PINT AE"
+      ],
+      "people": [
+        "mario.rossi@cliente-esempio.com"
+      ]
+    }
+  ],
+  "ignore": {
+    "senders": [
+      "noreply@",
+      "no-reply@",
+      "jira@archivagroup.atlassian.net"
+    ],
+    "subjectContains": [
+      "Out of Office",
+      "Fuori sede",
+      "Absence"
+    ],
+    "distributionListsUnlessNamed": [
+      "delivery@",
+      "ams@"
+    ]
+  },
+  "personalFolders": {
+    "DDMD-0000": "Progetti\\DDMD-0000 - Progetto esempio"
+  },
+  "confluenceWatch": [
+    {
+      "projectId": "DDMD-0000",
+      "cql": "space = \"EINV\" AND title ~ \"UAE\""
+    }
+  ],
+  "docTypes": {
+    "openIssues": {
+      "match": [
+        "Open Topics",
+        "Open Point",
+        "Issue list",
+        "Open issues"
+      ],
+      "folder": "",
+      "structure": {
+        "kind": "table",
+        "keyColumn": "ID",
+        "columns": [
+          "ID",
+          "Data apertura",
+          "Argomento",
+          "Descrizione",
+          "Owner",
+          "Scadenza",
+          "Stato",
+          "Note"
+        ],
+        "closedStatus": "Chiuso"
+      }
+    },
+    "cutover": {
+      "match": [
+        "cutover",
+        "go-live plan",
+        "piano di go-live"
+      ],
+      "folder": "6. Cutover - Live",
+      "structure": null
+    },
+    "techSheet": {
+      "match": [
+        "scheda tecnica",
+        "technical sheet",
+        "analisi tecnica"
+      ],
+      "folder": "3. Analisi",
+      "structure": null
+    }
+  },
+  "internalBuckets": {
+    "_internal-fei-uae": {
+      "name": "FEI UAE - prodotto (interno)",
+      "keywords": [
+        "FEI UAE",
+        "PINT AE"
+      ]
+    },
+    "_internal-fei-sk": {
+      "name": "FEI Slovacchia - prodotto (interno)",
+      "keywords": [
+        "FEI Slovacchia",
+        "FEI SK",
+        "BWS"
+      ]
+    }
+  },
+  "folderTemplate": {
+    "0. Offerta": "offerte, preventivi, quotazioni, ordini e conferme d'ordine del cliente",
+    "1. Avvio e info da prevendita": "kick-off, materiale di prevendita, presentazioni iniziali, contatti, info raccolte prima dell'avvio",
+    "2. Pianificazione": "piani di progetto, Gantt, cronoprogrammi, planning risorse",
+    "3. Analisi": "analisi funzionali e tecniche, specifiche, best practice, mapping, documenti di disegno",
+    "4. Implementazione": "sviluppi, configurazioni, trasporti, note tecniche di realizzazione, installazione",
+    "5. UAT": "test book, casi di test, esiti e verbali UAT, open topics / issue list di test, training",
+    "6. Cutover - Live": "piani di cutover e go-live, checklist di rilascio, verbali di go-live",
+    "7. Post Golive - Chiusura": "hypercare, open topics post go-live, verbali di chiusura, lessons learned",
+    "8. CR Extra di progetto": "change request ed extra rispetto all'offerta (con relativa documentazione)"
+  }
+}
