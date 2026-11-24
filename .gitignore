@@ -4,6 +4,7 @@ dist/
 *.log
 .env
 .env.*
+data/ledger/
 
 # Local data: real project registry, database and Claude snapshots stay on this machine
 data/*
